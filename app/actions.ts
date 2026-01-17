@@ -544,7 +544,7 @@ export async function setupInitialAdmin(prevState: any, formData: FormData) {
         return { success: true, message: "Admin created successfully" }
     } catch (error) {
         console.error("Setup Error:", error)
-        return { error: "Failed to create admin user" }
+        return { error: `Failed to create admin user: ${error instanceof Error ? error.message : "Unknown error"}` }
     }
 }
 
