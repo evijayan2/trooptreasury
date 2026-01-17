@@ -5,9 +5,12 @@ export const authConfig = {
         signIn: "/login",
     },
     callbacks: {
-        authorized({ auth, request: { nextUrl } }) {
+        authorized({ auth, request }) {
+            const { nextUrl } = request
             const isLoggedIn = !!auth?.user
             const isValidUser = isLoggedIn && (auth?.user?.role || false)
+            if (request.method === "OPTIONS") return true
+
             const isOnDashboard = nextUrl.pathname.startsWith("/dashboard")
 
             if (isOnDashboard) {
