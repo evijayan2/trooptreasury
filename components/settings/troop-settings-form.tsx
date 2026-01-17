@@ -92,7 +92,7 @@ export function TroopSettingsForm({ initialData, className }: { initialData?: an
                         )}
                     </div>
                     {state?.error && <p className="text-red-500 text-sm">{state.error}</p>}
-                    {state?.success && <p className="text-green-600 text-sm">{state.message}</p>}
+
                 </CardContent>
                 <CardFooter>
                     <Button type="submit" disabled={isPending} className="w-full">
