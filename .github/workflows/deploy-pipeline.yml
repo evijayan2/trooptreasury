@@ -1,0 +1,46 @@
+name: Vercel Deployment
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+env:
+  VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+  VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Vercel CLI
+        run: npm install --global vercel@latest
+
+      - name: Pull Vercel Environment Information
+        run: vercel pull --yes --environment=preview --token=${{ secrets.VERCEL_TOKEN }}
+        if: github.event_name == 'pull_request'
+
+      - name: Pull Vercel Environment Information (Production)
+        run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+        if: github.event_name == 'push'
+
+      - name: Build Project Artifacts
+        run: vercel build --yes --token=${{ secrets.VERCEL_TOKEN }}
+        if: github.event_name == 'pull_request'
+
+      - name: Build Project Artifacts (Production)
+        run: vercel build --prod --yes --token=${{ secrets.VERCEL_TOKEN }}
+        if: github.event_name == 'push'
+
+      - name: Deploy Project Artifacts to Vercel
+        run: vercel deploy --prebuilt --yes --token=${{ secrets.VERCEL_TOKEN }}
+        if: github.event_name == 'pull_request'
+
+      - name: Deploy Project Artifacts to Vercel (Production)
+        run: vercel deploy --prebuilt --prod --yes --token=${{ secrets.VERCEL_TOKEN }}
+        if: github.event_name == 'push'
