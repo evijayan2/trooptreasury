@@ -51,11 +51,20 @@ export function SetupForm() {
                         <Label htmlFor="password">Password</Label>
                         <Input id="password" name="password" type="password" required />
                         {state?.issues?.fieldErrors?.password && (
-                            <p className="text-red-500 text-xs">{state.issues.fieldErrors.password[0]}</p>
+                            <div className="text-red-500 text-xs mt-2">
+                                <p className="font-semibold">Password must be at least 12 characters. Current Password Requirements:</p>
+                                <ul className="list-disc list-inside mt-1 space-y-1 text-xs">
+                                    <li>At least 12 characters long</li>
+                                    <li>At least one uppercase letter</li>
+                                    <li>At least one lowercase letter</li>
+                                    <li>At least one number</li>
+                                    <li>At least one special character (e.g., !@#$%^&*)</li>
+                                </ul>
+                            </div>
                         )}
                     </div>
 
-                    {state?.error && <p className="text-red-500 text-sm">{state.error}</p>}
+                    {state?.error && state.error !== "Invalid fields" && <p className="text-red-500 text-sm">{state.error}</p>}
                     {state?.success && <p className="text-green-500 text-sm">{state.message}. Redirecting...</p>}
 
                     <Button type="submit" className="w-full" disabled={isPending}>
