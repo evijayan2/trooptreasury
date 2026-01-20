@@ -9,7 +9,7 @@ import { authConfig } from "./auth.config"
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
     ...authConfig,
-    adapter: PrismaAdapter(prisma) as any,
+    adapter: PrismaAdapter(prisma as any) as any,
     providers: [
         Credentials({
             credentials: {
