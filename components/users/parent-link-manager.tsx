@@ -25,6 +25,7 @@ import {
     TooltipContent,
     TooltipTrigger,
 } from "@/components/ui/tooltip"
+import { toast } from "sonner"
 
 export function ParentLinkManager({ user, allScouts }: { user: any, allScouts: any[] }) {
     const [selectedScout, setSelectedScout] = useState<string>("")
@@ -41,17 +42,19 @@ export function ParentLinkManager({ user, allScouts }: { user: any, allScouts: a
         const result = await linkParentToScout(user.id, selectedScout)
         if (result.success) {
             setSelectedScout("")
-            // The page will revalidate, but local state update might be needed or just rely on server mismatch
+            toast.success("Scout linked successfully")
         } else {
-            alert(result.error)
+            toast.error(result.error)
         }
     }
 
     const handleUnlink = async (scoutId: string) => {
         if (!confirm("Are you sure you want to unlink this scout?")) return
         const result = await unlinkParentFromScout(user.id, scoutId)
-        if (!result.success) {
-            alert(result.error)
+        if (result.success) {
+            toast.success("Scout unlinked successfully")
+        } else {
+            toast.error(result.error)
         }
     }
 

@@ -10,6 +10,10 @@ export default async function Page() {
     const session = await auth()
 
     const settings = await prisma.troopSettings.findFirst()
+    const serializedSettings = settings ? {
+        ...settings,
+        annualDuesAmount: settings.annualDuesAmount.toString()
+    } : undefined
 
     return (
         <div className="space-y-6">
@@ -22,7 +26,7 @@ export default async function Page() {
 
                 {session?.user?.role === 'ADMIN' && (
                     <div className="md:col-span-1 lg:col-span-2 space-y-6">
-                        <TroopSettingsForm initialData={settings} className="h-fit" />
+                        <TroopSettingsForm initialData={serializedSettings} className="h-fit" />
                     </div>
                 )}
             </div>

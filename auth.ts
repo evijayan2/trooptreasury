@@ -6,62 +6,10 @@ import { z } from "zod"
 import bcrypt from "bcryptjs"
 import { authConfig } from "./auth.config"
 
-const { callbacks, ...authConfigRest } = authConfig
-
-// Helper function to get session timeout from database
-async function getSessionTimeout() {
-    try {
-        const settings = await prisma.troopSettings.findFirst()
-        return (settings?.sessionTimeoutMinutes || 15) * 60 // Convert to seconds
-    } catch (error) {
-        console.error("Failed to fetch session timeout:", error)
-        return 15 * 60 // Default 15 minutes in seconds
-    }
-}
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
-    ...authConfigRest,
+    ...authConfig,
     adapter: PrismaAdapter(prisma) as any,
-    session: {
-        strategy: "jwt",
-        maxAge: 15 * 60, // Default 15 minutes, will be overridden by JWT callback
-    },
-    callbacks: {
-        async jwt({ token, user, trigger, session }) {
-            if (user) {
-                token.role = user.role
-                token.id = user.id
-            }
-            // Set dynamic session timeout
-            const timeoutSeconds = await getSessionTimeout()
-            token.exp = Math.floor(Date.now() / 1000) + timeoutSeconds
-            return token
-        },
-        async session({ session, token }) {
-            if (token && session.user) {
-                // Validate that user still exists and is active
-                try {
-
-                    const user = await prisma.user.findUnique({
-                        where: { id: token.id as string },
-                        select: { id: true, isActive: true, role: true }
-                    })
-
-                    // If user doesn't exist or is not active, invalidate session
-                    if (!user || !user.isActive) {
-
-                        return null as any // This will force logout
-                    }
-
-                    session.user.role = user.role as any
-                    session.user.id = user.id
-                } catch (error) {
-                    console.error("Session validation error:", error)
-                }
-            }
-            return session
-        },
-    },
     providers: [
         Credentials({
             credentials: {
@@ -88,11 +36,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
                     const user = await prisma.user.findUnique({ where: { email: lowercaseEmail } })
 
+
                     if (!user) {
-                        console.log(`User not found in DB for email: "${lowercaseEmail}"`)
+                        console.log(`[AUTH-DEBUG] User not found in DB for email: "${lowercaseEmail}"`)
                         return null
                     }
-
 
 
                     // Check if account is locked
@@ -104,7 +52,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
                     // Reset lock if expired
                     if (user.lockedUntil && user.lockedUntil <= new Date()) {
-
+                        console.log(`[AUTH-DEBUG] Lock expired, resetting...`);
                         await prisma.user.update({
                             where: { id: user.id },
                             data: {
@@ -115,12 +63,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                     }
 
                     if (!user.passwordHash) {
-
+                        console.log(`[AUTH-DEBUG] No password hash found for user`);
                         return null
                     }
 
 
                     const passwordsMatch = await bcrypt.compare(password, user.passwordHash)
+
 
 
                     if (passwordsMatch) {

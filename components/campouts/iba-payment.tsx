@@ -19,6 +19,7 @@ import {
     SelectValue,
 } from "@/components/ui/select"
 import { Wallet } from "lucide-react"
+import { toast } from "sonner"
 
 export function IBAPayment({ campoutId, linkedScouts, defaultAmount = 0, beneficiaryId, disabled = false, label = "Pay with IBA" }: { campoutId: string, linkedScouts: any[], defaultAmount?: number, beneficiaryId?: string, disabled?: boolean, label?: string }) {
     const [open, setOpen] = useState(false)
@@ -31,9 +32,9 @@ export function IBAPayment({ campoutId, linkedScouts, defaultAmount = 0, benefic
         if (result.success) {
             setOpen(false)
             setAmount("")
-            alert("Payment Successful")
+            toast.success("Payment Successful")
         } else {
-            alert(result.error)
+            toast.error(result.error)
         }
     }
 

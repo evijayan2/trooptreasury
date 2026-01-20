@@ -9,6 +9,7 @@ import {
     TooltipContent,
     TooltipTrigger,
 } from "@/components/ui/tooltip"
+import { toast } from "sonner"
 
 export function FinalizeCampoutButton({ campoutId }: { campoutId: string }) {
     const [loading, setLoading] = useState(false)
@@ -19,7 +20,9 @@ export function FinalizeCampoutButton({ campoutId }: { campoutId: string }) {
         setLoading(true)
         const result = await finalizeCampoutCosts(campoutId)
         if (result.error) {
-            alert(result.error)
+            toast.error(result.error)
+        } else {
+            toast.success("Campout finalized and payments opened")
         }
         setLoading(false)
     }

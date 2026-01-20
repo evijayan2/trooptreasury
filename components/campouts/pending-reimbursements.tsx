@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button"
 import { formatCurrency } from "@/lib/utils"
 import { Check } from "lucide-react"
 import { ExpenseEntryActions } from "@/components/transactions/expense-entry-actions"
+import { toast } from "sonner"
 
 export function PendingReimbursements({ expenses }: { expenses: any[] }) {
     if (expenses.length === 0) return null
@@ -12,7 +13,11 @@ export function PendingReimbursements({ expenses }: { expenses: any[] }) {
     const handleApprove = async (id: string) => {
         if (!confirm("Approve this reimbursement?")) return
         const result = await approveAdultExpense(id)
-        if (result.error) alert(result.error)
+        if (result.error) {
+            toast.error(result.error)
+        } else {
+            toast.success("Reimbursement approved")
+        }
     }
 
     return (

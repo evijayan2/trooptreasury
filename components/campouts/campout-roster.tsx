@@ -23,6 +23,7 @@ import { RemoveParticipantButton } from "./remove-participant-button"
 
 import { PaymentRecorder } from "./payment-recorder"
 import { formatCurrency } from "@/lib/utils"
+import { toast } from "sonner"
 
 export function CampoutRoster({ campoutId, registeredScouts, allScouts, canEdit = false, costPerPerson = 0 }: { campoutId: string, registeredScouts: any[], allScouts: any[], canEdit?: boolean, costPerPerson?: number }) {
     const [selectedScout, setSelectedScout] = useState<string>("")
@@ -37,8 +38,9 @@ export function CampoutRoster({ campoutId, registeredScouts, allScouts, canEdit 
         if (result.success) {
             setOpen(false)
             setSelectedScout("")
+            toast.success("Scout registered successfully")
         } else {
-            alert(result.error)
+            toast.error(result.error)
         }
     }
 

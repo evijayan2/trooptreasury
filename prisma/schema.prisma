@@ -1,5 +1,6 @@
 generator client {
   provider = "prisma-client-js"
+  output   = "../lib/generated/client"
 }
 
 datasource db {
@@ -7,26 +8,174 @@ datasource db {
 }
 
 model User {
-  id            String    @id @default(uuid())
-  email         String    @unique
-  name          String?
-  passwordHash  String?
-  role          Role      @default(SCOUT)
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  parentLinks   ParentScout[] @relation("Parent")
-  campouts      CampoutAdult[] @relation("CampoutAdults")
-  adultExpenses AdultExpense[]
-  transactions  Transaction[] @relation("UserTransactions")
-  approvedTransactions Transaction[] @relation("ApprovedBy")
-  isActive      Boolean   @default(true)
-  deactivatedAt DateTime?
-  invitationToken String? @unique
-  invitationExpires DateTime?
-  failedLoginAttempts Int @default(0)
-  lockedUntil DateTime?
-  lastFailedLogin DateTime?
-  scout         Scout?
+  id                   String         @id @default(uuid())
+  email                String         @unique
+  name                 String?
+  passwordHash         String?
+  role                 Role           @default(SCOUT)
+  createdAt            DateTime       @default(now())
+  updatedAt            DateTime       @updatedAt
+  isActive             Boolean        @default(true)
+  deactivatedAt        DateTime?
+  invitationToken      String?        @unique
+  invitationExpires    DateTime?
+  failedLoginAttempts  Int            @default(0)
+  lockedUntil          DateTime?
+  lastFailedLogin      DateTime?
+  adultExpenses        AdultExpense[]
+  campouts             CampoutAdult[] @relation("CampoutAdults")
+  parentLinks          ParentScout[]  @relation("Parent")
+  scout                Scout?
+  approvedTransactions Transaction[]  @relation("ApprovedBy")
+  transactions         Transaction[]  @relation("UserTransactions")
+  preferredTheme       String?        @default("system")
+  preferredColor       String?        @default("orange")
+}
+
+model Scout {
+  id           String         @id @default(uuid())
+  name         String
+  age          Int?
+  ibaBalance   Decimal        @default(0.00) @db.Decimal(10, 2)
+  status       ScoutStatus    @default(ACTIVE)
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  userId       String?        @unique
+  campouts     CampoutScout[]
+  parentLinks  ParentScout[]
+  user         User?          @relation(fields: [userId], references: [id])
+  transactions Transaction[]
+}
+
+model ParentScout {
+  parentId String
+  scoutId  String
+  parent   User   @relation("Parent", fields: [parentId], references: [id])
+  scout    Scout  @relation(fields: [scoutId], references: [id])
+
+  @@id([parentId, scoutId])
+}
+
+model CampoutScout {
+  campoutId    String
+  scoutId      String
+  registeredAt DateTime @default(now())
+  campout      Campout  @relation(fields: [campoutId], references: [id])
+  scout        Scout    @relation(fields: [scoutId], references: [id])
+
+  @@id([campoutId, scoutId])
+}
+
+model Campout {
+  id            String         @id @default(uuid())
+  name          String
+  startDate     DateTime
+  endDate       DateTime?
+  location      String?
+  estimatedCost Decimal?       @db.Decimal(10, 2)
+  status        CampoutStatus  @default(OPEN)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  expenses      AdultExpense[]
+  adults        CampoutAdult[]
+  scouts        CampoutScout[]
+  transactions  Transaction[]
+}
+
+model CampoutAdult {
+  campoutId String
+  adultId   String
+  role      CampoutAdultRole @default(ORGANIZER)
+  adult     User             @relation("CampoutAdults", fields: [adultId], references: [id])
+  campout   Campout          @relation(fields: [campoutId], references: [id])
+
+  @@id([campoutId, adultId, role])
+}
+
+model Transaction {
+  id                    String               @id @default(uuid())
+  type                  TransactionType
+  amount                Decimal              @db.Decimal(10, 2)
+  description           String?
+  fromAccount           String?
+  toAccount             String?
+  scoutId               String?
+  userId                String?
+  campoutId             String?
+  approvedBy            String?
+  status                TransactionStatus    @default(PENDING)
+  createdAt             DateTime             @default(now())
+  updatedAt             DateTime             @updatedAt
+  budgetCategoryId      String?
+  fundraisingCampaignId String?
+  approvedByUser        User?                @relation("ApprovedBy", fields: [approvedBy], references: [id])
+  budgetCategory        BudgetCategory?      @relation(fields: [budgetCategoryId], references: [id])
+  campout               Campout?             @relation(fields: [campoutId], references: [id])
+  fundraisingCampaign   FundraisingCampaign? @relation(fields: [fundraisingCampaignId], references: [id])
+  scout                 Scout?               @relation(fields: [scoutId], references: [id])
+  user                  User?                @relation("UserTransactions", fields: [userId], references: [id])
+}
+
+model AdultExpense {
+  id           String   @id @default(uuid())
+  campoutId    String
+  adultId      String
+  amount       Decimal  @db.Decimal(10, 2)
+  description  String
+  category     String?
+  createdAt    DateTime @default(now())
+  isReimbursed Boolean  @default(false)
+  adult        User     @relation(fields: [adultId], references: [id])
+  campout      Campout  @relation(fields: [campoutId], references: [id])
+}
+
+model TroopSettings {
+  id                    String   @id @default(uuid())
+  name                  String   @default("TroopTreasury")
+  council               String?
+  district              String?
+  address               String?
+  rolePermissions       Json?
+  sessionTimeoutMinutes Int      @default(15)
+  updatedAt             DateTime @updatedAt
+  annualDuesAmount      Decimal  @default(150.00) @db.Decimal(10, 2)
+}
+
+model Budget {
+  id         String           @id @default(uuid())
+  year       String
+  isActive   Boolean          @default(false)
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
+  categories BudgetCategory[]
+}
+
+model BudgetCategory {
+  id             String             @id @default(uuid())
+  budgetId       String
+  name           String
+  type           BudgetCategoryType
+  plannedIncome  Decimal            @default(0) @db.Decimal(10, 2)
+  plannedExpense Decimal            @default(0) @db.Decimal(10, 2)
+  budget         Budget             @relation(fields: [budgetId], references: [id])
+  transactions   Transaction[]
+}
+
+model FundraisingCampaign {
+  id                   String        @id @default(uuid())
+  name                 String
+  startDate            DateTime
+  endDate              DateTime?
+  goal                 Decimal       @db.Decimal(10, 2)
+  isComplianceApproved Boolean       @default(false)
+  ibaPercentage        Int               @default(0)
+  status               FundraisingStatus @default(ACTIVE)
+  transactions         Transaction[]
+}
+
+enum FundraisingStatus {
+  ACTIVE
+  CLOSED
 }
 
 enum Role {
@@ -37,61 +186,9 @@ enum Role {
   PARENT
 }
 
-model Scout {
-  id            String    @id @default(uuid())
-  name          String
-  age           Int?
-  ibaBalance    Decimal   @default(0.00) @db.Decimal(10, 2)
-  status        ScoutStatus @default(ACTIVE)
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  parentLinks   ParentScout[]
-  transactions  Transaction[]
-  campouts      CampoutScout[]
-  
-  userId        String?   @unique
-  user          User?     @relation(fields: [userId], references: [id])
-}
-
 enum ScoutStatus {
   ACTIVE
   INACTIVE
-}
-
-model ParentScout {
-  parentId      String
-  scoutId       String
-  parent        User      @relation("Parent", fields: [parentId], references: [id])
-  scout         Scout     @relation(fields: [scoutId], references: [id])
-  @@id([parentId, scoutId])
-}
-
-model CampoutScout {
-  campoutId     String
-  scoutId       String
-  campout       Campout   @relation(fields: [campoutId], references: [id])
-  scout         Scout     @relation(fields: [scoutId], references: [id])
-  registeredAt  DateTime  @default(now())
-
-  @@id([campoutId, scoutId])
-}
-
-
-
-model Campout {
-  id            String    @id @default(uuid())
-  name          String
-  startDate     DateTime
-  endDate       DateTime?
-  location      String?
-  estimatedCost Decimal?  @db.Decimal(10, 2)
-  status        CampoutStatus @default(OPEN)
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  adults        CampoutAdult[]
-  expenses      AdultExpense[]
-  scouts        CampoutScout[]
-  transactions  Transaction[]
 }
 
 enum CampoutStatus {
@@ -100,38 +197,9 @@ enum CampoutStatus {
   CLOSED
 }
 
-model CampoutAdult {
-  campoutId     String
-  adultId       String
-  campout       Campout   @relation(fields: [campoutId], references: [id])
-  adult         User      @relation("CampoutAdults", fields: [adultId], references: [id])
-  role          CampoutAdultRole @default(ORGANIZER)
-  @@id([campoutId, adultId, role])
-}
-
 enum CampoutAdultRole {
   ORGANIZER
   ATTENDEE
-}
-
-model Transaction {
-  id            String    @id @default(uuid())
-  type          TransactionType
-  amount        Decimal   @db.Decimal(10, 2)
-  description   String?
-  fromAccount   String?
-  toAccount     String?
-  scoutId       String?
-  userId        String?   // For Adult payments
-  campoutId     String?
-  approvedBy    String?
-  status        TransactionStatus @default(PENDING)
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  scout         Scout?    @relation(fields: [scoutId], references: [id])
-  user          User?     @relation("UserTransactions", fields: [userId], references: [id])
-  campout       Campout?  @relation(fields: [campoutId], references: [id])
-  approvedByUser User?    @relation("ApprovedBy", fields: [approvedBy], references: [id])
 }
 
 enum TransactionType {
@@ -144,6 +212,7 @@ enum TransactionType {
   DUES
   IBA_RECLAIM
   EVENT_PAYMENT
+  IBA_DEPOSIT
 }
 
 enum TransactionStatus {
@@ -152,26 +221,8 @@ enum TransactionStatus {
   REJECTED
 }
 
-model AdultExpense {
-  id            String    @id @default(uuid())
-  campoutId     String
-  adultId       String
-  amount        Decimal   @db.Decimal(10, 2)
-  description   String
-  category      String?
-  createdAt     DateTime  @default(now())
-  campout       Campout   @relation(fields: [campoutId], references: [id])
-  adult         User      @relation(fields: [adultId], references: [id])
-  isReimbursed  Boolean   @default(false)
-}
-
-model TroopSettings {
-  id            String    @id @default(uuid())
-  name          String    @default("TroopTreasury")
-  council       String?
-  district      String?
-  logoBase64    String?   @db.Text
-  rolePermissions Json?   // Stores Map<Role, Permission[]>
-  sessionTimeoutMinutes Int @default(15)
-  updatedAt     DateTime  @updatedAt
+enum BudgetCategoryType {
+  INCOME
+  EXPENSE
+  BOTH
 }

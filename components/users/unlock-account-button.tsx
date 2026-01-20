@@ -4,6 +4,7 @@ import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Unlock } from "lucide-react"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
+import { toast } from "sonner"
 
 export function UnlockAccountButton({ userId, onUnlock }: { userId: string, onUnlock?: () => void }) {
     const [loading, setLoading] = useState(false)
@@ -15,13 +16,14 @@ export function UnlockAccountButton({ userId, onUnlock }: { userId: string, onUn
             const result = await unlockUserAccount(userId)
 
             if (result.success) {
+                toast.success("Account unlocked")
                 onUnlock?.()
             } else {
-                alert(result.error || "Failed to unlock account")
+                toast.error(result.error || "Failed to unlock account")
             }
         } catch (error) {
             console.error("Unlock error:", error)
-            alert("Failed to unlock account")
+            toast.error("Failed to unlock account")
         } finally {
             setLoading(false)
         }

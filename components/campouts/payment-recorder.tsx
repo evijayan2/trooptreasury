@@ -13,6 +13,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { DollarSign } from "lucide-react"
+import { toast } from "sonner"
 
 export function PaymentRecorder({
     campoutId,
@@ -51,8 +52,9 @@ export function PaymentRecorder({
         if (result.success) {
             setOpen(false)
             setAmount("")
+            toast.success("Payment recorded successfully")
         } else {
-            alert(result.error)
+            toast.error(result.error)
         }
     }
 

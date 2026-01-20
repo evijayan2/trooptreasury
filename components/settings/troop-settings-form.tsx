@@ -11,18 +11,7 @@ import { cn } from "@/lib/utils"
 
 export function TroopSettingsForm({ initialData, className }: { initialData?: any, className?: string }) {
     const [state, dispatch, isPending] = useActionState(updateTroopSettings, undefined)
-    const [logoPreview, setLogoPreview] = useState<string | null>(initialData?.logoBase64 || null)
 
-    const handleLogoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0]
-        if (file) {
-            const reader = new FileReader()
-            reader.onloadend = () => {
-                setLogoPreview(reader.result as string)
-            }
-            reader.readAsDataURL(file)
-        }
-    }
 
     return (
         <Card className={cn(className)}>
@@ -61,6 +50,26 @@ export function TroopSettingsForm({ initialData, className }: { initialData?: an
                         />
                     </div>
                     <div className="space-y-2">
+                        <Label htmlFor="address">Address</Label>
+                        <Input
+                            id="address"
+                            name="address"
+                            defaultValue={initialData?.address || ""}
+                            placeholder="Troop Meeting Address"
+                        />
+                    </div>
+                    <div className="space-y-2">
+                        <Label htmlFor="annualDuesAmount">Annual Dues Amount ($)</Label>
+                        <Input
+                            id="annualDuesAmount"
+                            name="annualDuesAmount"
+                            type="number"
+                            step="0.01"
+                            defaultValue={initialData?.annualDuesAmount?.toString() || "150.00"}
+                            required
+                        />
+                    </div>
+                    <div className="space-y-2">
                         <Label htmlFor="sessionTimeoutMinutes">Session Timeout (minutes)</Label>
                         <Input
                             id="sessionTimeoutMinutes"
@@ -76,21 +85,7 @@ export function TroopSettingsForm({ initialData, className }: { initialData?: an
                             Users will be automatically logged out after this many minutes of inactivity (5-1440 minutes)
                         </p>
                     </div>
-                    <div className="space-y-2">
-                        <Label htmlFor="logo">Logo</Label>
-                        <Input
-                            id="logo"
-                            type="file"
-                            accept="image/*"
-                            onChange={handleLogoChange}
-                        />
-                        <input type="hidden" name="logoBase64" value={logoPreview || ""} />
-                        {logoPreview && (
-                            <div className="mt-2">
-                                <img src={logoPreview} alt="Logo Preview" className="h-20 object-contain" />
-                            </div>
-                        )}
-                    </div>
+
                     {state?.error && <p className="text-red-500 text-sm">{state.error}</p>}
 
                 </CardContent>

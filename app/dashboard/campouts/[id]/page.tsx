@@ -16,6 +16,7 @@ import { RemoveParticipantButton } from "@/components/campouts/remove-participan
 import { FinalizeCampoutButton } from "@/components/campouts/finalize-button"
 import { Button } from "@/components/ui/button"
 import { PayCashButton } from "@/components/campouts/pay-cash-button"
+import { PayoutControls } from "@/components/campouts/payout-controls"
 
 export default async function Page({ params }: { params: Promise<{ id: string }> }) {
     // ... existing setup
@@ -128,11 +129,34 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
         amount: Number(e.amount)
     }))
 
-    const serializedExpenses = expenses.map((t: any) => ({
-        ...t,
-        amount: Number(t.amount),
-        scout: t.scout ? { ...t.scout, ibaBalance: Number(t.scout.ibaBalance) } : null
-    }))
+    const serializedExpenses = [
+        ...expenses.map((t: any) => ({
+            ...t,
+            amount: Number(t.amount),
+            scout: t.scout ? { ...t.scout, ibaBalance: Number(t.scout.ibaBalance) } : null,
+            entryType: 'TRANSACTION'
+        })),
+        ...campout.expenses.map((e: any) => ({
+            id: e.id,
+            createdAt: e.createdAt,
+            type: 'EXPENSE',
+            description: `${e.description} (${e.adult.name})`,
+            amount: Number(e.amount),
+            status: e.isReimbursed ? 'APPROVED' : 'PENDING',
+            entryType: 'ADULT_EXPENSE'
+        }))
+    ].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+
+    const organizersWithExpenses = organizers.map(org => {
+        const pending = campout.expenses
+            .filter((e: any) => e.adultId === org.adultId && !e.isReimbursed)
+            .reduce((sum: number, e: any) => sum + Number(e.amount), 0)
+        return {
+            adultId: org.adultId,
+            adultName: org.adult.name,
+            pendingExpense: pending
+        }
+    })
 
     const serializedLinkedScouts = linkedScouts.map(s => ({
         ...s,
@@ -160,6 +184,7 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
             .filter((t: any) =>
                 ["CAMP_TRANSFER", "EVENT_PAYMENT"].includes(t.type) &&
                 t.scoutId === scout.id &&
+                !t.userId && // Ensure it's not a payment for an Adult
                 t.status === "APPROVED"
             )
             .reduce((sum: number, t: any) => sum + Number(t.amount), 0)
@@ -232,9 +257,17 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
                     )}
 
                     {/* Admin Actions */}
-                    {["ADMIN", "FINANCIER"].includes(role) && campout.status === 'OPEN' && (
+                    {["ADMIN", "FINANCIER"].includes(role) && (
                         <div className="mt-2">
-                            <FinalizeCampoutButton campoutId={campout.id} />
+                            {campout.status === 'OPEN' ? (
+                                <FinalizeCampoutButton campoutId={campout.id} />
+                            ) : (
+                                <PayoutControls
+                                    campoutId={campout.id}
+                                    status={campout.status}
+                                    organizers={organizersWithExpenses}
+                                />
+                            )}
                         </div>
                     )}
                 </div>
@@ -262,9 +295,22 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
                                 ) : (
                                     <>
                                         {campout.status === 'READY_FOR_PAYMENT' ? (
-                                            <div className="flex flex-col items-end gap-2">
+                                            <div className="flex flex-col items-end gap-2 mt-2 w-full max-w-[140px]">
+                                                {(() => {
+                                                    const hasFunds = serializedLinkedScouts.some((s: any) => Number(s.ibaBalance) >= costPerPerson)
+                                                    const isDisabled = serializedLinkedScouts.length === 0 || !hasFunds
+                                                    return (
+                                                        <IBAPayment
+                                                            campoutId={campout.id}
+                                                            linkedScouts={serializedLinkedScouts}
+                                                            defaultAmount={costPerPerson}
+                                                            beneficiaryId={session?.user?.id}
+                                                            disabled={isDisabled}
+                                                            label="Pay with IBA"
+                                                        />
+                                                    )
+                                                })()}
                                                 <PayCashButton message={`Please pay ${formatCurrency(costPerPerson)} cash to the organizer.`} />
-                                                {/* Could add IBA payment for Adult self if supported later */}
                                             </div>
                                         ) : (
                                             <span className="text-xs text-gray-500 italic">Waiting for finalization</span>
@@ -369,6 +415,7 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
                                         .filter((t: any) =>
                                             ["CAMP_TRANSFER", "EVENT_PAYMENT"].includes(t.type) &&
                                             t.scoutId === cs.scout.id &&
+                                            !t.userId && // Ensure it's not a payment for an Adult
                                             t.status === "APPROVED"
                                         )
                                         .reduce((sum: number, t: any) => sum + Number(t.amount), 0)
@@ -418,9 +465,6 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
                                             <li key={o.adult.id} className="flex justify-between items-center bg-gray-50 dark:bg-muted p-3 rounded">
                                                 <div className="flex flex-col">
                                                     <span>{o.adult.name}</span>
-                                                    {isMe && (
-                                                        <RoleSwitcher campoutId={campout.id} adultId={o.adult.id} currentRole="ORGANIZER" />
-                                                    )}
                                                 </div>
                                                 {canEdit && (
                                                     <RemoveParticipantButton campoutId={campout.id} id={o.adult.id} type="ADULT" />

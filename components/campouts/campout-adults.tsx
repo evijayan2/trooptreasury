@@ -18,6 +18,7 @@ import {
     SelectValue,
 } from "@/components/ui/select"
 import { Plus } from "lucide-react"
+import { toast } from "sonner"
 
 export function CampoutAdults({ campoutId, adults, allAdults }: { campoutId: string, adults: any[], allAdults: any[] }) {
     const [selectedAdult, setSelectedAdult] = useState<string>("")
@@ -34,8 +35,9 @@ export function CampoutAdults({ campoutId, adults, allAdults }: { campoutId: str
             setOpen(false)
             setSelectedAdult("")
             setRole("ORGANIZER")
+            toast.success("Adult assigned successfully")
         } else {
-            alert(result.error)
+            toast.error(result.error)
         }
     }
 

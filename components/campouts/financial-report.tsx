@@ -55,7 +55,10 @@ export function FinancialReport({ transactions, expenses }: FinancialReportProps
             id: t.id,
             date: t.createdAt,
             // Try to find name: scout name OR user name
-            name: t.scout?.name || t.user?.name || "Unknown",
+            // If it's an IBA transfer for an adult, show both
+            name: t.user?.name && t.scout?.name && t.type === "CAMP_TRANSFER"
+                ? `${t.user.name} (from ${t.scout.name} IBA)`
+                : (t.scout?.name || t.user?.name || "Unknown"),
             amount: Number(t.amount),
             type: t.type === "CAMP_TRANSFER" ? "IBA Transfer" : "Cash/Direct"
         }))

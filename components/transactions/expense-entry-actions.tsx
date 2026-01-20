@@ -13,6 +13,7 @@ import {
     DialogTrigger,
 } from "@/components/ui/dialog"
 import { Pencil, Trash2 } from "lucide-react"
+import { toast } from "sonner"
 
 interface expenseEntryActionsProps {
     id: string
@@ -32,19 +33,21 @@ export function ExpenseEntryActions({ id, type, initialDescription, initialAmoun
     const handleDelete = async () => {
         if (!confirm("Are you sure you want to delete this entry?")) return
 
+        let result
         if (type === "TRANSACTION") {
-            await deleteTransaction(id)
+            result = await deleteTransaction(id)
         } else {
-            await deleteAdultExpense(id)
+            result = await deleteAdultExpense(id)
+        }
+
+        if (result?.success) {
+            toast.success("Entry deleted")
+        } else if (result?.error) {
+            toast.error(result.error)
         }
     }
 
     const handleUpdate = async (formData: FormData) => {
-        // We override the form data with state if needed, or just let form submit default values
-        // Actually, updating state on change is good for controlled inputs.
-        // But FormData works automatically with named inputs.
-
-        // Wait, binding id to action.
         let result
         if (type === "TRANSACTION") {
             result = await updateTransaction(id, formData)
@@ -54,8 +57,9 @@ export function ExpenseEntryActions({ id, type, initialDescription, initialAmoun
 
         if (result.success) {
             setOpen(false)
+            toast.success("Entry updated")
         } else {
-            alert(result.error)
+            toast.error(result.error)
         }
     }
 

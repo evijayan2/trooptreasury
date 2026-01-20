@@ -31,6 +31,6 @@ export const DEFAULT_PERMISSIONS: Record<Role, Permission[]> = {
         "MANAGE_SCOUTS"
     ],
     SCOUT: [
-        "VIEW_DASHBOARD"
+        "VIEW_DASHBOARD", "VIEW_CAMPOUTS", "VIEW_TRANSACTIONS", "VIEW_SCOUTS"
     ]
 }

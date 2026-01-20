@@ -15,10 +15,19 @@ export default async function Page() {
     let cards: { title: string, value: string, desc: string, link: string }[] = []
 
     if (role === 'ADMIN' || role === 'FINANCIER' || role === 'LEADER') {
-        const totalTransactions = await prisma.transaction.aggregate({
-            _sum: { amount: true }
+        const incomeTypes = ["REGISTRATION_INCOME", "FUNDRAISING_INCOME", "DONATION_IN", "DUES", "EVENT_PAYMENT", "IBA_DEPOSIT"]
+        const expenseTypes = ["EXPENSE", "REIMBURSEMENT", "IBA_RECLAIM"]
+
+        const transactions = await prisma.transaction.findMany({
+            where: { status: 'APPROVED' },
+            select: { amount: true, type: true }
         })
-        const balance = totalTransactions._sum.amount ? Number(totalTransactions._sum.amount) : 0
+
+        const balance = transactions.reduce((acc, t) => {
+            if (incomeTypes.includes(t.type)) return acc + Number(t.amount)
+            if (expenseTypes.includes(t.type)) return acc - Number(t.amount)
+            return acc
+        }, 0)
 
         const activeScouts = await prisma.scout.count({ where: { status: 'ACTIVE' } })
 
@@ -26,7 +35,7 @@ export default async function Page() {
             title: "Troop Balance",
             value: formatCurrency(balance),
             desc: "Total funds available",
-            link: "/dashboard/transactions"
+            link: "/dashboard/finance"
         })
         cards.push({
             title: "Active Scouts",
@@ -53,7 +62,8 @@ export default async function Page() {
 
     if (role === 'SCOUT') {
         const scout = await prisma.scout.findUnique({
-            where: { userId: session?.user?.id }
+            where: { userId: session?.user?.id },
+            include: { transactions: { where: { type: 'DUES' } } }
         })
         if (scout) {
             cards.push({
@@ -62,6 +72,19 @@ export default async function Page() {
                 desc: "Current I.B.A.",
                 link: `/dashboard/scouts/${scout.id}`
             })
+
+            // Add Dues Card if needed
+            const troopSettings = await prisma.troopSettings.findFirst()
+            const targetDues = Number(troopSettings?.annualDuesAmount || 150)
+            const paidDues = scout.transactions.reduce((sum, t) => sum + Number(t.amount), 0)
+            if (paidDues < targetDues) {
+                cards.push({
+                    title: "My Dues",
+                    value: formatCurrency(targetDues - paidDues),
+                    desc: "Annual Dues Remaining",
+                    link: "/dashboard/finance/dues"
+                })
+            }
         }
     }
 
@@ -91,11 +114,11 @@ export default async function Page() {
                 ))}
             </div>
 
-            {/* Payments Due Section (For Parents, Leaders, Admins) */}
-            {role !== 'SCOUT' && session?.user?.id && (
+            {/* Payments Due Section (For Scouts, Parents, Leaders, Admins) */}
+            {session?.user?.id && (
                 <div className="mt-8">
                     <h2 className="text-xl font-bold mb-4">Outstanding Payments</h2>
-                    <PaymentsDueList parentId={session.user.id} />
+                    <PaymentsDueList userId={session.user.id} />
                 </div>
             )}
 

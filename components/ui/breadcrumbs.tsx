@@ -18,6 +18,7 @@ export function Breadcrumbs() {
         users: "Users",
         transactions: "Transactions",
         settings: "Settings",
+        login: "Logging In...", // Should not see this for long
     }
 
     return (
@@ -30,7 +31,7 @@ export function Breadcrumbs() {
                         className="flex items-center gap-1 hover:text-gray-900 dark:hover:text-gray-100 transition-colors"
                     >
                         <Home className="w-4 h-4" />
-                        <span className="sr-only">Dashboard</span>
+                        <span className="hidden md:block">Dashboard</span>
                     </Link>
                 </li>
 

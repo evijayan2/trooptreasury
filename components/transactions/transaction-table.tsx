@@ -39,10 +39,10 @@ export function TransactionTable({ transactions }: { transactions: any[] }) {
                             </TableCell>
                             <TableCell>{tx.status}</TableCell>
                             <TableCell>
-                                {tx.type === 'EXPENSE' && (
+                                {(tx.type === 'EXPENSE' || tx.entryType === 'ADULT_EXPENSE') && (
                                     <ExpenseEntryActions
                                         id={tx.id}
-                                        type="TRANSACTION"
+                                        type={tx.entryType === 'ADULT_EXPENSE' ? 'ADULT_EXPENSE' : 'TRANSACTION'}
                                         initialDescription={tx.description}
                                         initialAmount={Number(tx.amount)}
                                     />

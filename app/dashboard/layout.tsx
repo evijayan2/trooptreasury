@@ -4,23 +4,11 @@ import { prisma } from "@/lib/prisma";
 import { redirect } from "next/navigation";
 import { Breadcrumbs } from "@/components/ui/breadcrumbs";
 import { Footer } from "@/components/footer";
+import { Suspense } from "react";
 
 export default async function Layout({ children }: { children: React.ReactNode }) {
     // Check auth
     const session = await auth()
-
-    // Validate user still exists and is active
-    if (session?.user?.id) {
-        const user = await prisma.user.findUnique({
-            where: { id: session.user.id },
-            select: { isActive: true }
-        })
-
-        // If user doesn't exist or is not active, redirect to login
-        if (!user || !user.isActive) {
-            await signOut({ redirectTo: "/login" })
-        }
-    }
 
     // Check if we need onboarding
     // We only check this for ADMINs, theoretically? Or everyone?
@@ -70,7 +58,9 @@ export default async function Layout({ children }: { children: React.ReactNode }
     return (
         <div className="flex h-screen flex-col md:flex-row md:overflow-hidden">
             <div className="w-full flex-none md:w-64">
-                <SideNav />
+                <Suspense fallback={<div className="w-full h-full bg-gray-100 dark:bg-gray-800 animate-pulse" />}>
+                    <SideNav />
+                </Suspense>
             </div>
             <div className="flex-grow flex flex-col md:overflow-y-auto">
                 <div className="flex-grow p-6 md:p-12">

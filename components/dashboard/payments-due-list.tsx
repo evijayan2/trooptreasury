@@ -10,13 +10,37 @@ import {
     TooltipTrigger,
 } from "@/components/ui/tooltip"
 
-export async function PaymentsDueList({ parentId }: { parentId: string }) {
-    // 1. Get Parents Scouts
-    const parentLinks = await prisma.parentScout.findMany({
-        where: { parentId },
+export async function PaymentsDueList({ userId }: { userId: string }) {
+    const user = await prisma.user.findUnique({
+        where: { id: userId },
         include: { scout: true }
     })
-    const linkedScoutIds = parentLinks.map(l => l.scoutId)
+    if (!user) return null
+
+    // 1. Get Scouts to check
+    let scoutIdsToCheck: string[] = []
+    let parentLinks: any[] = []
+
+    if (user.role === 'PARENT') {
+        parentLinks = await prisma.parentScout.findMany({
+            where: { parentId: userId },
+            include: { scout: true }
+        })
+        scoutIdsToCheck = parentLinks.map(l => l.scoutId)
+    } else if (user.role === 'SCOUT' && user.scout) {
+        scoutIdsToCheck = [user.scout.id]
+        // Mock a parent link object structure for the loop below
+        parentLinks = [{ scout: user.scout }]
+    } else if (["ADMIN", "FINANCIER", "LEADER"].includes(user.role)) {
+        // For admins/leaders, we might want to show their own attendance if any
+        // but the prompt focused on parents paying for scouts or scouts paying for self.
+        // Let's at least handle them as an optional "Parent" if they have links
+        parentLinks = await prisma.parentScout.findMany({
+            where: { parentId: userId },
+            include: { scout: true }
+        })
+        scoutIdsToCheck = parentLinks.map(l => l.scoutId)
+    }
 
     // 2. Get Campouts that are Ready for Payment
     // We care about campouts where scouts OR parent is attending
@@ -24,8 +48,8 @@ export async function PaymentsDueList({ parentId }: { parentId: string }) {
         where: {
             status: "READY_FOR_PAYMENT",
             OR: [
-                { scouts: { some: { scoutId: { in: linkedScoutIds } } } },
-                { adults: { some: { adultId: parentId, role: "ATTENDEE" } } }
+                { scouts: { some: { scoutId: { in: scoutIdsToCheck } } } },
+                { adults: { some: { adultId: userId, role: "ATTENDEE" } } }
             ]
         },
         include: {
@@ -80,12 +104,12 @@ export async function PaymentsDueList({ parentId }: { parentId: string }) {
 
 
         // Check Parent (Adult)
-        const userAttendee = campout.adults.find(a => a.adultId === parentId && a.role === "ATTENDEE")
+        const userAttendee = campout.adults.find(a => a.adultId === userId && a.role === "ATTENDEE")
         if (userAttendee) {
             const paidAmount = campout.transactions
                 .filter(t =>
                     ["REGISTRATION_INCOME", "CAMP_TRANSFER", "EVENT_PAYMENT"].includes(t.type) &&
-                    t.userId === parentId &&
+                    t.userId === userId &&
                     t.status === "APPROVED"
                 )
                 .reduce((sum, t) => sum + Number(t.amount), 0)

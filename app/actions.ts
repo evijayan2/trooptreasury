@@ -170,15 +170,24 @@ export async function acceptInvitation(prevState: any, formData: FormData) {
     }
 
     const { token, password } = validatedFields.data
+    console.log(`[AUTH-DEBUG] acceptInvitation called with token: ${token}`);
 
     try {
         const user = await prisma.user.findUnique({
             where: { invitationToken: token }
         })
 
-        if (!user || !user.invitationExpires || user.invitationExpires < new Date()) {
+        if (!user) {
+            console.log(`[AUTH-DEBUG] User NOT found for token: ${token}`);
             return { error: "Invalid or expired invitation token" }
         }
+
+        if (!user.invitationExpires || user.invitationExpires < new Date()) {
+            console.log(`[AUTH-DEBUG] Token EXPIRED for user: ${user.email}, expires at: ${user.invitationExpires}`);
+            return { error: "Invalid or expired invitation token" }
+        }
+
+        console.log(`[AUTH-DEBUG] Token Valid for user: ${user.email}`);
 
         const hashedPassword = await bcrypt.hash(password, 10)
 
@@ -204,8 +213,9 @@ export async function authenticate(
 ) {
     try {
         const email = formData.get("email") as string
+        const password = formData.get("password") as string
 
-        // Import rate limiter dynamically to avoid issues
+        // Import rate limiter dynamically
         const { rateLimiter, RATE_LIMITS } = await import("@/lib/rate-limiter")
 
         // Check rate limit
@@ -214,13 +224,15 @@ export async function authenticate(
             return `Too many login attempts. Please try again in ${Math.ceil(resetTime / 60)} minutes.`
         }
 
-
-        await signIn("credentials", formData)
+        // Explicitly pass credentials and redirectTo
+        await signIn("credentials", {
+            email,
+            password,
+            redirectTo: "/dashboard"
+        })
 
     } catch (error: any) {
-
         if (error instanceof AuthError) {
-
             switch (error.type) {
                 case "CredentialsSignin":
                     return "Invalid credentials."
@@ -228,6 +240,8 @@ export async function authenticate(
                     return "Something went wrong."
             }
         }
+        // Very important: Next.js redirect() and signIn() work by throwing an error.
+        // We MUST rethrow it so Next.js can handle the redirection.
         throw error
     }
 }
@@ -721,11 +735,12 @@ const troopSettingsSchema = z.object({
     name: z.string().min(1, "Troop name is required"),
     council: z.string().optional(),
     district: z.string().optional(),
-    logoBase64: z.string().optional(),
+    address: z.string().optional(),
     sessionTimeoutMinutes: z.string().refine((val) => {
         const num = Number(val)
         return !isNaN(num) && num >= 5 && num <= 1440
     }, "Session timeout must be between 5 and 1440 minutes"),
+    annualDuesAmount: z.string().refine(val => !isNaN(Number(val)), "Invalid amount"),
 })
 
 export async function updateTroopSettings(prevState: any, formData: FormData) {
@@ -738,9 +753,12 @@ export async function updateTroopSettings(prevState: any, formData: FormData) {
         name: formData.get("name"),
         council: formData.get("council"),
         district: formData.get("district"),
-        logoBase64: formData.get("logoBase64"),
+        address: formData.get("address"),
         sessionTimeoutMinutes: formData.get("sessionTimeoutMinutes"),
+        annualDuesAmount: formData.get("annualDuesAmount") !== null ? formData.get("annualDuesAmount") : "150",
     }
+
+    console.log("Saving Troop Settings. Raw Dues:", rawData.annualDuesAmount)
 
     const validatedFields = troopSettingsSchema.safeParse(rawData)
 
@@ -748,7 +766,7 @@ export async function updateTroopSettings(prevState: any, formData: FormData) {
         return { error: "Invalid fields", issues: validatedFields.error.flatten() }
     }
 
-    const { name, council, district, logoBase64, sessionTimeoutMinutes } = validatedFields.data
+    const { name, council, district, address, sessionTimeoutMinutes, annualDuesAmount } = validatedFields.data
 
     try {
         // Upsert: Create if not exists, update if exists. We assume only one row.
@@ -762,8 +780,9 @@ export async function updateTroopSettings(prevState: any, formData: FormData) {
                     name,
                     council,
                     district,
-                    logoBase64,
-                    sessionTimeoutMinutes: parseInt(sessionTimeoutMinutes)
+                    address,
+                    sessionTimeoutMinutes: parseInt(sessionTimeoutMinutes),
+                    annualDuesAmount: new Decimal(annualDuesAmount)
                 }
             })
         } else {
@@ -772,19 +791,22 @@ export async function updateTroopSettings(prevState: any, formData: FormData) {
                     name,
                     council,
                     district,
-                    logoBase64,
-                    sessionTimeoutMinutes: parseInt(sessionTimeoutMinutes)
+                    address,
+                    sessionTimeoutMinutes: parseInt(sessionTimeoutMinutes),
+                    annualDuesAmount: new Decimal(annualDuesAmount)
                 }
             })
         }
 
         revalidatePath("/dashboard")
+        revalidatePath("/dashboard/settings")
+        revalidatePath("/dashboard/finance/dues")
     } catch (error) {
         console.error("Troop Settings Error:", error)
         return { error: "Failed to save settings" }
     }
 
-    redirect("/dashboard")
+    redirect("/dashboard/settings")
 }
 
 export async function updateRolePermissions(prevState: any, formData: FormData) {
@@ -1116,8 +1138,10 @@ export async function transferIBAToCampout(campoutId: string, scoutId: string, a
         return { error: "Unauthorized" }
     }
 
+    const campout = await prisma.campout.findUnique({ where: { id: campoutId } })
+    if (campout?.status === 'CLOSED') return { error: "Campout is closed and cannot accept new transactions." }
+
     const transferAmount = new Decimal(amount)
-    if (transferAmount.lessThanOrEqualTo(0)) return { error: "Invalid amount" }
 
     try {
         await prisma.$transaction(async (tx) => {
@@ -1304,6 +1328,9 @@ export async function logCampoutExpense(prevState: any, formData: FormData) {
     if (!campoutId || !description || !amount || !paidBy) {
         return { error: "Missing required fields" }
     }
+
+    const campout = await prisma.campout.findUnique({ where: { id: campoutId } })
+    if (campout?.status === 'CLOSED') return { error: "Campout is closed and cannot accept new transactions." }
 
     try {
         // Auto-add the payer as an organizer if they're not already registered
@@ -1493,5 +1520,217 @@ export async function clearAllData() {
     } catch (error) {
         console.error("System Reset Error:", error)
         return { error: "Failed to reset system data" }
+    }
+}
+
+export async function batchIBAPayout(campoutId: string) {
+    const session = await auth()
+    if (!session || !["ADMIN", "FINANCIER"].includes(session.user.role)) {
+        return { error: "Unauthorized" }
+    }
+
+    const campout = await prisma.campout.findUnique({
+        where: { id: campoutId },
+        include: {
+            scouts: { include: { scout: true } },
+            adults: { include: { adult: true } },
+            transactions: {
+                where: {
+                    status: "APPROVED",
+                }
+            },
+            expenses: true
+        }
+    })
+
+    if (!campout) return { error: "Campout not found" }
+    if (campout.status === "CLOSED") return { error: "Campout is already closed" }
+
+    // Calculate cost per person
+    const directExpenses = campout.transactions.filter((t: any) => t.type === "EXPENSE")
+    const transactionsCost = directExpenses.reduce((sum: number, t: any) => sum + Number(t.amount), 0)
+    const adultExpensesCost = campout.expenses.reduce((sum: number, e: any) => sum + Number(e.amount), 0)
+    const totalCampoutCost = transactionsCost + adultExpensesCost
+
+    const attendees = campout.adults.filter((a: any) => a.role === "ATTENDEE")
+    const totalPeople = campout.scouts.length + attendees.length
+    if (totalPeople === 0) return { error: "No participants to collect from" }
+
+    const costPerPerson = new Decimal(totalCampoutCost).dividedBy(totalPeople).toDecimalPlaces(2)
+
+    try {
+        const results = await prisma.$transaction(async (tx) => {
+            const updates = []
+
+            // Scouts
+            for (const cs of campout.scouts) {
+                const paidAmount = campout.transactions
+                    .filter(t => t.scoutId === cs.scoutId && !t.userId && ["CAMP_TRANSFER", "REGISTRATION_INCOME", "EVENT_PAYMENT"].includes(t.type))
+                    .reduce((sum, t) => sum.plus(new Decimal(t.amount)), new Decimal(0))
+
+                const due = costPerPerson.minus(paidAmount)
+                if (due.greaterThan(0)) {
+                    if (cs.scout.ibaBalance.lessThan(due)) {
+                        throw new Error(`Scout ${cs.scout.name} has insufficient IBA funds.`)
+                    }
+
+                    // Collect from IBA
+                    await tx.transaction.create({
+                        data: {
+                            type: "CAMP_TRANSFER",
+                            amount: due,
+                            description: "Automated IBA Collection",
+                            scoutId: cs.scoutId,
+                            campoutId: campoutId,
+                            status: "APPROVED",
+                            approvedBy: session.user.id
+                        }
+                    })
+
+                    await tx.scout.update({
+                        where: { id: cs.scoutId },
+                        data: { ibaBalance: { decrement: due } }
+                    })
+                    updates.push(`${cs.scout.name}: collected $${due}`)
+                }
+            }
+
+            // Attendee Adults
+            for (const ca of attendees) {
+                const paidAmount = campout.transactions
+                    .filter(t => t.userId === ca.adultId && ["CAMP_TRANSFER", "REGISTRATION_INCOME", "EVENT_PAYMENT"].includes(t.type))
+                    .reduce((sum, t) => sum.plus(new Decimal(t.amount)), new Decimal(0))
+
+                const due = costPerPerson.minus(paidAmount)
+                if (due.greaterThan(0)) {
+                    // find a scout linked to this parent that has funds
+                    const parentScoutLinks = await tx.parentScout.findMany({
+                        where: { parentId: ca.adultId },
+                        include: { scout: true }
+                    })
+                    const fundingScout = parentScoutLinks.find(ps => ps.scout.ibaBalance.greaterThanOrEqualTo(due))
+
+                    if (!fundingScout) {
+                        throw new Error(`Adult ${ca.adult.name} has no linked scout with sufficient IBA funds.`)
+                    }
+
+                    await tx.transaction.create({
+                        data: {
+                            type: "CAMP_TRANSFER",
+                            amount: due,
+                            description: `Automated Payout for Adult (${ca.adult.name})`,
+                            scoutId: fundingScout.scoutId,
+                            userId: ca.adultId,
+                            campoutId: campoutId,
+                            status: "APPROVED",
+                            approvedBy: session.user.id
+                        }
+                    })
+
+                    await tx.scout.update({
+                        where: { id: fundingScout.scoutId },
+                        data: { ibaBalance: { decrement: due } }
+                    })
+                    updates.push(`${ca.adult.name}: collected $${due} from ${fundingScout.scout.name}`)
+                }
+            }
+            return updates
+        })
+
+        revalidatePath(`/dashboard/campouts/${campoutId}`)
+        return { success: true, message: "Batch IBA Collection Successful", details: results }
+    } catch (e: any) {
+        return { error: e.message }
+    }
+}
+
+export async function payoutOrganizers(campoutId: string, payouts: Record<string, number>) {
+    const session = await auth()
+    if (!session || !["ADMIN", "FINANCIER"].includes(session.user.role)) {
+        return { error: "Unauthorized" }
+    }
+
+    try {
+        const result = await prisma.$transaction(async (tx) => {
+            const entries = Object.entries(payouts)
+            if (entries.length === 0) return { message: "No payouts specified" }
+
+            for (const [adultId, amount] of entries) {
+                if (amount <= 0) continue
+
+                const adult = await tx.user.findUnique({ where: { id: adultId } })
+                const adultName = adult?.name || "Unknown Organizer"
+
+                // Create Reimbursement Transaction
+                await tx.transaction.create({
+                    data: {
+                        type: "REIMBURSEMENT",
+                        amount: new Decimal(amount),
+                        description: `Organizer Payout: ${adultName}`,
+                        campoutId: campoutId,
+                        userId: adultId,
+                        approvedBy: session.user.id,
+                        status: "APPROVED"
+                    }
+                })
+
+                // Mark all pending expenses for this adult as reimbursed
+                // Even if the payout amount differs, we consider their campout liability cleared
+                await tx.adultExpense.updateMany({
+                    where: {
+                        campoutId,
+                        adultId,
+                        isReimbursed: false
+                    },
+                    data: { isReimbursed: true }
+                })
+            }
+            return { message: `Processed ${entries.length} payouts` }
+        })
+
+        revalidatePath(`/dashboard/campouts/${campoutId}`)
+        return { success: true, message: result.message }
+    } catch (e: any) {
+        return { error: e.message }
+    }
+}
+
+export async function closeCampout(campoutId: string) {
+    const session = await auth()
+    if (!session || !["ADMIN", "FINANCIER"].includes(session.user.role)) {
+        return { error: "Unauthorized" }
+    }
+
+    try {
+        await prisma.campout.update({
+            where: { id: campoutId },
+            data: { status: "CLOSED" }
+        })
+        revalidatePath(`/dashboard/campouts/${campoutId}`)
+        return { success: true, message: "Campout closed" }
+    } catch (e: any) {
+        return { error: e.message }
+    }
+}
+
+export async function updateUserAppearance(theme: string, color: string) {
+    const session = await auth()
+    if (!session || !session.user?.email) {
+        return { error: "Unauthorized" }
+    }
+
+    try {
+        await prisma.user.update({
+            where: { email: session.user.email },
+            data: {
+                preferredTheme: theme,
+                preferredColor: color
+            }
+        })
+        revalidatePath("/dashboard")
+        return { success: true }
+    } catch (error) {
+        console.error("Update Appearance Error:", error)
+        return { error: "Failed to update appearance" }
     }
 }

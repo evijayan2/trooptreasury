@@ -40,7 +40,7 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-/lib/generated/prisma
+/lib/generated/
 
 # local development
 .gemini/
@@ -49,3 +49,15 @@ next-env.d.ts
 *.log
 Thumbs.db
 .env*.local
+playwright-report/
+test-results/
+
+
+# Temporary Scripts and Data
+*.csv
+debug-settings.js
+full_audit.js
+full_audit.ts
+generate_*.py
+get_data.ts
+check_campaigns.ts
