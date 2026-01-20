@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { useState } from "react"
 import { upsertBudgetCategory, deleteBudgetCategory } from "@/app/actions/finance"
 import { toast } from "sonner"
-import { BudgetCategoryType } from "@prisma/client"
+import { BudgetCategoryType } from "@/lib/generated/client"
 import { Trash2 } from "lucide-react"
 
 const schema = z.object({
