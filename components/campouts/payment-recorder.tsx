@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { useRouter } from "next/navigation"
 import { recordAdultPayment, recordScoutPayment } from "@/app/actions"
 import { Button } from "@/components/ui/button"
 import {
@@ -12,6 +13,13 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select"
 import { DollarSign } from "lucide-react"
 import { toast } from "sonner"
 
@@ -34,17 +42,19 @@ export function PaymentRecorder({
     className?: string,
     variant?: "default" | "destructive" | "outline" | "secondary" | "ghost" | "link"
 }) {
+    const router = useRouter()
     const [open, setOpen] = useState(false)
     const [amount, setAmount] = useState(defaultAmount > 0 ? defaultAmount.toFixed(2) : "")
+    const [source, setSource] = useState("CASH")
 
     const handleRecord = async () => {
         if (!amount) return
 
         let result
         if (scoutId) {
-            result = await recordScoutPayment(campoutId, scoutId, amount)
+            result = await recordScoutPayment(campoutId, scoutId, amount, source)
         } else if (adultId) {
-            result = await recordAdultPayment(campoutId, adultId, amount)
+            result = await recordAdultPayment(campoutId, adultId, amount, source)
         } else {
             return
         }
@@ -52,7 +62,9 @@ export function PaymentRecorder({
         if (result.success) {
             setOpen(false)
             setAmount("")
+            setSource("CASH")
             toast.success("Payment recorded successfully")
+            router.refresh()
         } else {
             toast.error(result.error)
         }
@@ -79,6 +91,18 @@ export function PaymentRecorder({
                             value={amount}
                             onChange={(e) => setAmount(e.target.value)}
                         />
+                    </div>
+                    <div className="space-y-2">
+                        <Label>Payment Source</Label>
+                        <Select value={source} onValueChange={setSource}>
+                            <SelectTrigger>
+                                <SelectValue placeholder="Select source" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="CASH">Cash / Check / External</SelectItem>
+                                <SelectItem value="TROOP">Troop Subsidy</SelectItem>
+                            </SelectContent>
+                        </Select>
                     </div>
                     <Button onClick={handleRecord} className="w-full">
                         Record Payment

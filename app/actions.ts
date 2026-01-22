@@ -22,6 +22,7 @@ const createUserSchema = z.object({
     email: z.string().email(),
     name: z.string().min(1),
     role: z.nativeEnum(Role),
+    childScouts: z.array(z.string()).optional(),
 })
 
 const acceptInvitationSchema = z.object({
@@ -58,6 +59,7 @@ export async function createUser(prevState: any, formData: FormData) {
         email: formData.get("email"),
         name: formData.get("name"),
         role: formData.get("role"),
+        childScouts: formData.getAll("childScouts").map(s => s.toString()).filter(s => s.trim() !== ""),
     })
 
     if (!validatedFields.success) {
@@ -96,6 +98,27 @@ export async function createUser(prevState: any, formData: FormData) {
                     userId: newUser.id // Link immediately
                 }
             })
+            revalidatePath("/dashboard/scouts")
+            revalidatePath("/dashboard/scouts")
+        }
+
+        // Auto-create Child Scouts if role is PARENT
+        if (role === 'PARENT' && validatedFields.data.childScouts && validatedFields.data.childScouts.length > 0) {
+            for (const childName of validatedFields.data.childScouts) {
+                const child = await prisma.scout.create({
+                    data: {
+                        name: childName,
+                        status: 'ACTIVE',
+                        ibaBalance: new Decimal(0),
+                    }
+                })
+                await prisma.parentScout.create({
+                    data: {
+                        parentId: newUser.id,
+                        scoutId: child.id
+                    }
+                })
+            }
             revalidatePath("/dashboard/scouts")
         }
 
@@ -376,6 +399,9 @@ const scoutSchema = z.object({
     name: z.string().min(1, "Name is required"),
     age: z.string().optional(),
     status: z.nativeEnum(ScoutStatus),
+    email: z.string().email().optional().or(z.literal('')),
+    parentId: z.string().optional(),
+    initialBalance: z.string().optional(),
 })
 
 export async function createScout(prevState: any, formData: FormData) {
@@ -388,6 +414,9 @@ export async function createScout(prevState: any, formData: FormData) {
         name: formData.get("name"),
         age: formData.get("age"),
         status: formData.get("status"),
+        email: formData.get("email"),
+        parentId: formData.get("parentId"),
+        initialBalance: formData.get("initialBalance"),
     }
 
     const validatedFields = scoutSchema.safeParse(rawData)
@@ -397,15 +426,28 @@ export async function createScout(prevState: any, formData: FormData) {
         return { error: "Invalid fields", issues: validatedFields.error.flatten() }
     }
 
-    const { name, age, status } = validatedFields.data
+    const { name, age, status, email, parentId, initialBalance } = validatedFields.data
 
     try {
-        await prisma.scout.create({
-            data: {
-                name,
-                age: age ? parseInt(age) : null,
-                status,
-                ibaBalance: new Decimal(0),
+        await prisma.$transaction(async (tx) => {
+            const scout = await tx.scout.create({
+                data: {
+                    name,
+                    age: age ? parseInt(age) : null,
+                    status,
+                    // @ts-ignore
+                    email: email || null,
+                    ibaBalance: initialBalance ? new Decimal(initialBalance) : new Decimal(0),
+                }
+            })
+
+            if (parentId) {
+                await tx.parentScout.create({
+                    data: {
+                        parentId,
+                        scoutId: scout.id
+                    }
+                })
             }
         })
 
@@ -740,7 +782,6 @@ const troopSettingsSchema = z.object({
         const num = Number(val)
         return !isNaN(num) && num >= 5 && num <= 1440
     }, "Session timeout must be between 5 and 1440 minutes"),
-    annualDuesAmount: z.string().refine(val => !isNaN(Number(val)), "Invalid amount"),
 })
 
 export async function updateTroopSettings(prevState: any, formData: FormData) {
@@ -755,10 +796,9 @@ export async function updateTroopSettings(prevState: any, formData: FormData) {
         district: formData.get("district"),
         address: formData.get("address"),
         sessionTimeoutMinutes: formData.get("sessionTimeoutMinutes"),
-        annualDuesAmount: formData.get("annualDuesAmount") !== null ? formData.get("annualDuesAmount") : "150",
     }
 
-    console.log("Saving Troop Settings. Raw Dues:", rawData.annualDuesAmount)
+
 
     const validatedFields = troopSettingsSchema.safeParse(rawData)
 
@@ -766,7 +806,7 @@ export async function updateTroopSettings(prevState: any, formData: FormData) {
         return { error: "Invalid fields", issues: validatedFields.error.flatten() }
     }
 
-    const { name, council, district, address, sessionTimeoutMinutes, annualDuesAmount } = validatedFields.data
+    const { name, council, district, address, sessionTimeoutMinutes } = validatedFields.data
 
     try {
         // Upsert: Create if not exists, update if exists. We assume only one row.
@@ -782,7 +822,6 @@ export async function updateTroopSettings(prevState: any, formData: FormData) {
                     district,
                     address,
                     sessionTimeoutMinutes: parseInt(sessionTimeoutMinutes),
-                    annualDuesAmount: new Decimal(annualDuesAmount)
                 }
             })
         } else {
@@ -793,7 +832,6 @@ export async function updateTroopSettings(prevState: any, formData: FormData) {
                     district,
                     address,
                     sessionTimeoutMinutes: parseInt(sessionTimeoutMinutes),
-                    annualDuesAmount: new Decimal(annualDuesAmount)
                 }
             })
         }
@@ -869,7 +907,7 @@ export async function assignAdultToCampout(campoutId: string, adultId: string, r
     }
 }
 
-export async function recordAdultPayment(campoutId: string, adultId: string, amount: string) {
+export async function recordAdultPayment(campoutId: string, adultId: string, amount: string, source: string = "CASH") {
     const session = await auth()
     if (!session || !["ADMIN", "FINANCIER", "LEADER"].includes(session.user.role)) {
         return { error: "Unauthorized" }
@@ -879,11 +917,17 @@ export async function recordAdultPayment(campoutId: string, adultId: string, amo
         const paymentAmount = new Decimal(amount)
         if (paymentAmount.lte(0)) throw new Error("Invalid amount")
 
+        const isTroopSource = source === "TROOP"
+        const type = isTroopSource ? "TROOP_PAYMENT" : "EVENT_PAYMENT"
+        const description = isTroopSource
+            ? "Troop Subsidy / Incentive"
+            : "Adult Campout Fee Payment (Manual/Cash)"
+
         await prisma.transaction.create({
             data: {
-                type: "EVENT_PAYMENT", // Or generic INCOME? Using REGISTRATION_INCOME for camp fees.
+                type,
                 amount: paymentAmount,
-                description: "Adult Campout Fee Payment (Manual/Cash)",
+                description,
                 campoutId: campoutId,
                 userId: adultId, // Track who paid
                 approvedBy: session.user.id,
@@ -899,7 +943,7 @@ export async function recordAdultPayment(campoutId: string, adultId: string, amo
     }
 }
 
-export async function recordScoutPayment(campoutId: string, scoutId: string, amount: string) {
+export async function recordScoutPayment(campoutId: string, scoutId: string, amount: string, source: string = "CASH") {
     const session = await auth()
     if (!session || !["ADMIN", "FINANCIER", "LEADER"].includes(session.user.role)) {
         return { error: "Unauthorized" }
@@ -909,11 +953,17 @@ export async function recordScoutPayment(campoutId: string, scoutId: string, amo
         const paymentAmount = new Decimal(amount)
         if (paymentAmount.lte(0)) throw new Error("Invalid amount")
 
+        const isTroopSource = source === "TROOP"
+        const type = isTroopSource ? "TROOP_PAYMENT" : "EVENT_PAYMENT"
+        const description = isTroopSource
+            ? "Troop Subsidy / Incentive"
+            : "Scout Campout Fee Payment (Manual/Cash)"
+
         await prisma.transaction.create({
             data: {
-                type: "EVENT_PAYMENT",
+                type,
                 amount: paymentAmount,
-                description: "Scout Campout Fee Payment (Manual/Cash)",
+                description,
                 campoutId: campoutId,
                 scoutId: scoutId,
                 approvedBy: session.user.id,
@@ -1734,3 +1784,122 @@ export async function updateUserAppearance(theme: string, color: string) {
         return { error: "Failed to update appearance" }
     }
 }
+
+
+
+export async function inviteUserForScout(scoutId: string) {
+    const session = await auth()
+    if (!session) return { error: "Unauthorized" }
+
+    // Authorization: Admin/Leader OR Linked Parent (regardless of role string)
+    const isGlobalAdmin = ["ADMIN", "LEADER"].includes(session.user.role)
+    const isLinkedParent = !!(await prisma.parentScout.findUnique({
+        where: { parentId_scoutId: { parentId: session.user.id, scoutId } }
+    }))
+
+    if (!isGlobalAdmin && !isLinkedParent) return { error: "Unauthorized" }
+
+
+
+    try {
+        const scout = await prisma.scout.findUnique({ where: { id: scoutId } })
+        if (!scout) return { error: "Scout not found" }
+        if (!scout.email) return { error: "Scout has no email" }
+        if (scout.userId) return { error: "Scout already has a user account" }
+
+        const invitationToken = crypto.randomUUID()
+        const invitationExpires = new Date(Date.now() + 48 * 60 * 60 * 1000)
+
+        // Find or Create User? Since user shouldn't exist as Scout needs dedicated user logic usually.
+        // But what if the user ALREADY exists (e.g. parent email used for scout)? 
+        // Scout users should have unique emails.
+
+        const existingUser = await prisma.user.findUnique({ where: { email: (scout as any).email } })
+        if (existingUser) return { error: "User with this email already exists" }
+
+        await prisma.$transaction(async (tx) => {
+            const newUser = await tx.user.create({
+                data: {
+                    email: scout.email!,
+                    name: scout.name,
+                    role: "SCOUT",
+                    invitationToken,
+                    invitationExpires,
+                }
+            })
+
+            await tx.scout.update({
+                where: { id: scoutId },
+                data: { userId: newUser.id }
+            })
+        })
+
+        // Fetch Troop Settings for Email
+        const troopSettings = await prisma.troopSettings.findFirst()
+        const troopName = troopSettings?.name || "TroopTreasury"
+        const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"
+        const inviteUrl = `${appUrl}/invite?token=${invitationToken}`
+
+        console.log(`Sending invite to ${(scout as any).email} with url: ${inviteUrl}`)
+
+        if (resend) {
+            await resend.emails.send({
+                from: 'TroopTreasury <onboarding@vpillai.online>',
+                to: (scout as any).email,
+                subject: `Welcome to ${troopName} - Complete Setup`,
+                html: `
+                    <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
+                        <h1>${troopName}</h1>
+                        <p>Hello ${scout.name},</p>
+                        <p>An account has been created for you on <strong>${troopName}</strong>.</p>
+                        <p>Please click the link below to set your password and activate your account:</p>
+                        <p style="margin: 20px 0;">
+                            <a href="${inviteUrl}" style="background-color: #0070f3; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;">
+                                Accept Invitation & Set Password
+                            </a>
+                        </p>
+                        <p style="color: #666; font-size: 14px;">This link will expire in 48 hours.</p>
+                    </div>
+                `
+            })
+        } else {
+            console.error("Email service not configured - RESEND_API_KEY missing")
+        }
+
+        console.log(`Invite URL for ${scout.name}: ${inviteUrl}`)
+
+        revalidatePath(`/dashboard/scouts/${scoutId}`)
+        return { success: true, message: "User account created and invite sent" }
+
+    } catch (error) {
+        console.error("Invite Error:", error)
+        return { error: "Failed to invite user" }
+    }
+}
+
+export async function updateScoutEmail(scoutId: string, email: string) {
+    const session = await auth()
+    if (!session) return { error: "Unauthorized" }
+
+    // Authorization: Admin/Leader OR Linked Parent (regardless of role string)
+    const isGlobalAdmin = ["ADMIN", "LEADER"].includes(session.user.role)
+    const isLinkedParent = !!(await prisma.parentScout.findUnique({
+        where: { parentId_scoutId: { parentId: session.user.id, scoutId } }
+    }))
+
+    if (!isGlobalAdmin && !isLinkedParent) return { error: "Unauthorized" }
+
+
+
+    try {
+        await prisma.scout.update({
+            where: { id: scoutId },
+            data: { email }
+        })
+        revalidatePath(`/dashboard/scouts/${scoutId}`)
+        return { success: true, message: "Email updated" }
+    } catch (e) {
+        return { error: "Failed to update email" }
+    }
+}
+

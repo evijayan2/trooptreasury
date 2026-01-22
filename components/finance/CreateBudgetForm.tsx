@@ -15,6 +15,7 @@ import { toast } from "sonner"
 const schema = z.object({
     year: z.string().min(1, "Budget Name/Year is required"),
     isActive: z.boolean(),
+    annualDuesAmount: z.string().min(1, "Amount is required"),
 })
 
 type FormData = z.infer<typeof schema>
@@ -26,7 +27,8 @@ export function CreateBudgetForm() {
         resolver: zodResolver(schema),
         defaultValues: {
             year: new Date().getFullYear().toString() + "-" + (new Date().getFullYear() + 1).toString(),
-            isActive: true
+            isActive: true,
+            annualDuesAmount: "150.00"
         }
     })
 
@@ -35,6 +37,7 @@ export function CreateBudgetForm() {
     const onSubmit = async (data: FormData) => {
         const formData = new FormData()
         formData.append("year", data.year)
+        formData.append("annualDuesAmount", data.annualDuesAmount)
         if (data.isActive) formData.append("isActive", "on")
 
         const result = await upsertBudget(null, formData)
@@ -65,6 +68,12 @@ export function CreateBudgetForm() {
                             Use a descriptive name like "2025-2026" or "Summer 2025".
                         </p>
                         {errors.year && <p className="text-red-500 text-sm">{errors.year.message}</p>}
+                    </div>
+
+                    <div>
+                        <Label htmlFor="annualDuesAmount">Annual Dues Amount ($)</Label>
+                        <Input id="annualDuesAmount" type="number" step="0.01" {...register("annualDuesAmount")} placeholder="150.00" />
+                        {errors.annualDuesAmount && <p className="text-red-500 text-sm">{errors.annualDuesAmount.message}</p>}
                     </div>
 
                     <div className="flex items-center space-x-2 border p-3 rounded-md">

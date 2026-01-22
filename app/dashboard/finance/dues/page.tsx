@@ -11,10 +11,11 @@ export default async function DuesPage() {
 
     const isAdmin = ["ADMIN", "FINANCIER", "LEADER"].includes(session.user.role)
 
-    // 1. Get Dues Category from Active Budget to know the target amount (Optional comparison)
-    // We now use TroopSettings for the authoritative Dues Amount
-    const troopSettings = await prisma.troopSettings.findFirst()
-    const targetDues = Number(troopSettings?.annualDuesAmount || 150)
+    // 1. Get Dues Category from Active Budget to know the target amount
+    const activeBudget = await prisma.budget.findFirst({
+        where: { status: 'ACTIVE' }
+    })
+    const targetDues = Number(activeBudget?.annualDuesAmount || 150)
 
     // 2. Fetch Scouts
     let scouts: any[] = []

@@ -45,7 +45,8 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
             type: t.type,
             amount: t.amount,
             userId: t.userId,
-            scoutId: t.scoutId
+            scoutId: t.scoutId,
+            status: t.status // Explicitly log status
         })))
     }
 
@@ -54,6 +55,22 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
     const allScouts = await prisma.scout.findMany({ where: { status: "ACTIVE" } })
     const allAdults = await prisma.user.findMany({
         where: { role: { in: ["ADMIN", "LEADER", "FINANCIER", "PARENT"] } }
+    })
+
+    // Fetch Parent-Scout links for all potential adults to enable IBA payments from their children
+    const allParentScouts = await prisma.parentScout.findMany({
+        where: {
+            parentId: { in: campout.adults.map((a: any) => a.adultId) }
+        },
+        include: { scout: true }
+    })
+
+    const adultToScoutsMap = new Map<string, any[]>()
+    allParentScouts.forEach(ps => {
+        if (!adultToScoutsMap.has(ps.parentId)) {
+            adultToScoutsMap.set(ps.parentId, [])
+        }
+        adultToScoutsMap.get(ps.parentId)?.push(ps.scout)
     })
 
     // Data for Financials Table (Transactions)
@@ -148,9 +165,19 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
     ].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
 
     const organizersWithExpenses = organizers.map(org => {
-        const pending = campout.expenses
-            .filter((e: any) => e.adultId === org.adultId && !e.isReimbursed)
+        // Total expenses logged by this organizer
+        const totalExpenses = campout.expenses
+            .filter((e: any) => e.adultId === org.adultId)
             .reduce((sum: number, e: any) => sum + Number(e.amount), 0)
+
+        // Total amount already reimbursed (based on transactions)
+        const totalReimbursed = campout.transactions
+            .filter((t: any) => t.type === 'REIMBURSEMENT' && t.userId === org.adultId)
+            .reduce((sum: number, t: any) => sum + Number(t.amount), 0)
+
+        // Pending amount is the difference
+        const pending = Math.max(0, totalExpenses - totalReimbursed)
+
         return {
             adultId: org.adultId,
             adultName: org.adult.name,
@@ -175,25 +202,26 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
 
     // Calculate Total Collected
     const totalCollected = campout.transactions
-        .filter((t: any) => ["CAMP_TRANSFER", "REGISTRATION_INCOME", "EVENT_PAYMENT"].includes(t.type) && t.status === "APPROVED")
+        .filter((t: any) => (["CAMP_TRANSFER", "REGISTRATION_INCOME", "EVENT_PAYMENT"].includes(t.type) || t.type.startsWith("TROOP")) && t.status === "APPROVED")
         .reduce((sum: number, t: any) => sum + Number(t.amount), 0)
 
     // Prepare My Scouts Payment Data
     const myScoutsData = serializedLinkedScouts.map(scout => {
         const amountPaid = campout.transactions
             .filter((t: any) =>
-                ["CAMP_TRANSFER", "EVENT_PAYMENT"].includes(t.type) &&
+                (["CAMP_TRANSFER", "EVENT_PAYMENT"].includes(t.type) || t.type.startsWith("TROOP")) &&
                 t.scoutId === scout.id &&
-                !t.userId && // Ensure it's not a payment for an Adult
                 t.status === "APPROVED"
             )
             .reduce((sum: number, t: any) => sum + Number(t.amount), 0)
         const isPaid = amountPaid >= costPerPerson && costPerPerson > 0
+        const remainingDue = Math.max(0, costPerPerson - amountPaid)
 
         return {
             ...scout,
             amountPaid,
-            isPaid
+            isPaid,
+            remainingDue
         }
     })
 
@@ -213,7 +241,7 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
     if (isAttendee) {
         const amountPaid = campout.transactions
             .filter((t: any) =>
-                ["REGISTRATION_INCOME", "CAMP_TRANSFER", "EVENT_PAYMENT"].includes(t.type) &&
+                ["REGISTRATION_INCOME", "CAMP_TRANSFER", "EVENT_PAYMENT", "TROOP_PAYMENT"].includes(t.type) &&
                 t.userId === session?.user?.id &&
                 t.status === "APPROVED"
             )
@@ -222,6 +250,7 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
         myAdultPaymentData = { amountPaid, isPaid }
     }
 
+    const isClosed = campout.status === "CLOSED"
     const canViewFinances = ["ADMIN", "FINANCIER"].includes(role) || isOrganizer
     const canViewRoster = ["ADMIN", "FINANCIER", "LEADER"].includes(role) || isOrganizer
 
@@ -294,7 +323,7 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
                                     <span className="px-3 py-1 bg-green-200 text-green-800 rounded-full text-xs font-bold">PAID</span>
                                 ) : (
                                     <>
-                                        {campout.status === 'READY_FOR_PAYMENT' ? (
+                                        {campout.status === 'READY_FOR_PAYMENT' && !isClosed ? (
                                             <div className="flex flex-col items-end gap-2 mt-2 w-full max-w-[140px]">
                                                 {(() => {
                                                     const hasFunds = serializedLinkedScouts.some((s: any) => Number(s.ibaBalance) >= costPerPerson)
@@ -313,7 +342,9 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
                                                 <PayCashButton message={`Please pay ${formatCurrency(costPerPerson)} cash to the organizer.`} />
                                             </div>
                                         ) : (
-                                            <span className="text-xs text-gray-500 italic">Waiting for finalization</span>
+                                            <span className="text-xs text-gray-500 italic">
+                                                {isClosed ? "Campout Closed" : "Waiting for finalization"}
+                                            </span>
                                         )}
                                     </>
                                 )}
@@ -331,8 +362,8 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
 
                             <div className="flex items-center justify-between mt-auto">
                                 <div>
-                                    <div className="text-xs text-gray-500 dark:text-gray-400">Share Due</div>
-                                    <div className="font-bold text-gray-900 dark:text-gray-100">{formatCurrency(costPerPerson)}</div>
+                                    <div className="text-xs text-gray-500 dark:text-gray-400">Amount Due</div>
+                                    <div className="font-bold text-gray-900 dark:text-gray-100">{formatCurrency(scout.remainingDue)}</div>
                                 </div>
 
                                 {scout.isPaid ? (
@@ -341,23 +372,23 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
                                     </span>
                                 ) : (
                                     <>
-                                        {campout.status === 'READY_FOR_PAYMENT' ? (
+                                        {campout.status === 'READY_FOR_PAYMENT' && !isClosed ? (
                                             <div className="flex flex-col gap-2 w-full sm:w-auto min-w-[140px]">
                                                 <IBAPayment
                                                     campoutId={campout.id}
                                                     linkedScouts={[scout]} // Pass only this scout
-                                                    defaultAmount={costPerPerson}
-                                                    disabled={Number(scout.ibaBalance) < costPerPerson}
-                                                    label={Number(scout.ibaBalance) < costPerPerson ? "Insuff. Funds" : "Pay with IBA"}
+                                                    defaultAmount={scout.remainingDue}
+                                                    disabled={Number(scout.ibaBalance) <= 0}
+                                                    label="Pay with IBA"
                                                 />
-                                                <PayCashButton message={`Please pay ${formatCurrency(costPerPerson)} cash to the organizer.`} />
+                                                <PayCashButton message={`Please pay ${formatCurrency(scout.remainingDue)} cash to the organizer.`} />
 
                                                 {["ADMIN", "FINANCIER", "LEADER"].includes(role) && (
                                                     <PaymentRecorder
                                                         campoutId={campout.id}
                                                         scoutId={scout.id}
                                                         adultName={scout.name}
-                                                        defaultAmount={costPerPerson}
+                                                        defaultAmount={scout.remainingDue}
                                                         label="Record Pay"
                                                         className="w-full"
                                                         variant="outline"
@@ -365,7 +396,9 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
                                                 )}
                                             </div>
                                         ) : (
-                                            <span className="text-xs text-gray-500 italic">Waiting for finalization</span>
+                                            <span className="text-xs text-gray-500 italic">
+                                                {isClosed ? "Campout Closed" : "Waiting for finalization"}
+                                            </span>
                                         )}
                                     </>
                                 )}
@@ -382,22 +415,30 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
                         <div className="p-6 bg-white dark:bg-card dark:text-card-foreground rounded-lg border shadow-sm space-y-4">
                             <div className="flex justify-between items-center">
                                 <h2 className="text-xl font-semibold">Financials</h2>
-                                <ExpenseLogger
-                                    campoutId={campout.id}
-                                    adults={campout.adults}
-                                    allAdults={allAdults}
-                                    currentUserId={session?.user?.id}
-                                    userRole={role}
-                                />
+                                {!isClosed && campout.status === 'OPEN' && (
+                                    <ExpenseLogger
+                                        campoutId={campout.id}
+                                        adults={campout.adults}
+                                        allAdults={allAdults}
+                                        currentUserId={session?.user?.id}
+                                        userRole={role}
+                                    />
+                                )}
                             </div>
                             <p className="text-sm text-gray-500">Total Exp: {formatCurrency(totalCampoutCost)}</p>
 
                             {canApprove && serializedPendingExpenses.length > 0 && (
-                                <PendingReimbursements expenses={serializedPendingExpenses} />
+                                <PendingReimbursements
+                                    expenses={serializedPendingExpenses}
+                                    isReadOnly={campout.status !== 'OPEN'}
+                                />
                             )}
 
                             {serializedExpenses.length > 0 ? (
-                                <TransactionTable transactions={serializedExpenses} />
+                                <TransactionTable
+                                    transactions={serializedExpenses}
+                                    isReadOnly={campout.status !== 'OPEN'}
+                                />
                             ) : (
                                 <p className="text-gray-500 text-sm">No expenses recorded.</p>
                             )}
@@ -413,45 +454,37 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
                                 registeredScouts={campout.scouts.map((cs: any) => {
                                     const paidAmount = campout.transactions
                                         .filter((t: any) =>
-                                            ["CAMP_TRANSFER", "EVENT_PAYMENT"].includes(t.type) &&
+                                            (["CAMP_TRANSFER", "EVENT_PAYMENT"].includes(t.type) || t.type.startsWith("TROOP")) &&
                                             t.scoutId === cs.scout.id &&
-                                            !t.userId && // Ensure it's not a payment for an Adult
                                             t.status === "APPROVED"
                                         )
                                         .reduce((sum: number, t: any) => sum + Number(t.amount), 0)
                                     const isPaid = paidAmount >= costPerPerson
+                                    const remainingDue = Math.max(0, costPerPerson - paidAmount)
                                     return {
                                         ...cs,
                                         scout: { ...cs.scout, ibaBalance: Number(cs.scout.ibaBalance) },
-                                        isPaid
+                                        isPaid,
+                                        remainingDue
                                     }
                                 })}
                                 allScouts={allScouts.map(s => ({ ...s, ibaBalance: Number(s.ibaBalance) }))}
-                                canEdit={["ADMIN", "LEADER", "FINANCIER"].includes(role)}
+                                canEdit={["ADMIN", "LEADER", "FINANCIER"].includes(role) && !isClosed}
                                 costPerPerson={costPerPerson}
+                                campoutStatus={campout.status}
                             />
                         </div>
-
-
-
 
                         <div className="p-6 bg-white dark:bg-card dark:text-card-foreground rounded-lg border shadow-sm space-y-4">
                             <div className="flex justify-between items-center">
                                 <h3 className="text-lg font-semibold">Adults</h3>
-                                {/* Assign Adult Button could go here or inside CampoutAdults component */}
-                                { /* For now, relying on CampoutAdults but modifying it to handle roles? 
-                                  Actually, CampoutAdults logic is complex. 
-                                  Let's replace CampoutAdults usage with inline rendering or update the component.
-                                  The user wants separation.
-                                  I will keep CampoutAdults for "Adding" adults but maybe display is custom here?
-                                  No, let's update CampoutAdults component to Handle roles?
-                                  Or just render two lists here.
-                             */ }
-                                <CampoutAdults
-                                    campoutId={campout.id}
-                                    adults={campout.adults} // Passing all adults, component needs update to handle roles or we just list them here.
-                                    allAdults={allAdults}
-                                />
+                                {!isClosed && campout.status === 'OPEN' && (
+                                    <CampoutAdults
+                                        campoutId={campout.id}
+                                        adults={campout.adults} // Passing all adults, component needs update to handle roles or we just list them here.
+                                        allAdults={allAdults}
+                                    />
+                                )}
                             </div>
 
                             {/* Custom Rendering for Roles Display if CampoutAdults doesn't do it */}
@@ -460,13 +493,13 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
                                 <ul className="space-y-2">
                                     {organizers.map(o => {
                                         const isMe = o.adultId === session?.user?.id
-                                        const canEdit = ["ADMIN", "LEADER", "FINANCIER"].includes(role)
+                                        const canEdit = ["ADMIN", "LEADER", "FINANCIER"].includes(role) && !isClosed
                                         return (
                                             <li key={o.adult.id} className="flex justify-between items-center bg-gray-50 dark:bg-muted p-3 rounded">
                                                 <div className="flex flex-col">
                                                     <span>{o.adult.name}</span>
                                                 </div>
-                                                {canEdit && (
+                                                {canEdit && campout.status === 'OPEN' && (
                                                     <RemoveParticipantButton campoutId={campout.id} id={o.adult.id} type="ADULT" />
                                                 )}
                                             </li>
@@ -482,18 +515,19 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
                                     {attendees.map((a: any) => {
                                         // Check payment status for this adult
                                         const paidAmount = campout.transactions
-                                            .filter((t: any) => t.userId === a.adultId && ["REGISTRATION_INCOME", "CAMP_TRANSFER", "EVENT_PAYMENT"].includes(t.type) && t.status === "APPROVED")
+                                            .filter((t: any) => t.userId === a.adultId && ["REGISTRATION_INCOME", "CAMP_TRANSFER", "EVENT_PAYMENT", "TROOP_PAYMENT"].includes(t.type) && t.status === "APPROVED")
                                             .reduce((sum: number, t: any) => sum + Number(t.amount), 0)
 
+                                        const remainingDue = Math.max(0, costPerPerson - paidAmount)
                                         const isPaid = paidAmount >= costPerPerson
                                         const isMe = a.adultId === session?.user?.id
 
-                                        const canEdit = ["ADMIN", "LEADER", "FINANCIER"].includes(role)
+                                        const canEdit = ["ADMIN", "LEADER", "FINANCIER"].includes(role) && !isClosed
                                         return (
                                             <li key={a.adult.id} className="flex justify-between items-center bg-gray-50 dark:bg-muted p-3 rounded">
                                                 <div className="flex items-center gap-2">
                                                     <span>{a.adult.name}</span>
-                                                    {canEdit && (
+                                                    {canEdit && campout.status === 'OPEN' && (
                                                         <RemoveParticipantButton campoutId={campout.id} id={a.adult.id} type="ADULT" />
                                                     )}
                                                 </div>
@@ -502,20 +536,38 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
                                                         <span className="px-2 py-0.5 bg-green-200 text-green-800 rounded text-xs font-bold">PAID</span>
                                                     ) : (
                                                         <>
-                                                            <span className="text-xs text-red-500 font-semibold">{formatCurrency(costPerPerson)} Due</span>
+                                                            <span className="text-xs text-red-500 font-semibold">{formatCurrency(remainingDue)} Due</span>
                                                             {/* Admin Record Payment (For Others) */}
-                                                            {!isMe && (role === "ADMIN" || role === "FINANCIER" || role === "LEADER") && (
-                                                                <PaymentRecorder
-                                                                    campoutId={campout.id}
-                                                                    adultId={a.adult.id}
-                                                                    defaultAmount={costPerPerson}
-                                                                    label="Record Pay"
-                                                                />
+                                                            {!isMe && !isClosed && (role === "ADMIN" || role === "FINANCIER" || role === "LEADER") && campout.status !== 'OPEN' && (
+                                                                <>
+                                                                    {(() => {
+                                                                        const likedScouts = adultToScoutsMap.get(a.adult.id) || []
+                                                                        const serializedLikedScouts = likedScouts.map((s: any) => ({ ...s, ibaBalance: Number(s.ibaBalance) }))
+                                                                        if (serializedLikedScouts.length === 0) return null
+                                                                        return (
+                                                                            <IBAPayment
+                                                                                campoutId={campout.id}
+                                                                                linkedScouts={serializedLikedScouts}
+                                                                                defaultAmount={remainingDue}
+                                                                                beneficiaryId={a.adult.id}
+                                                                                label="Pay IBA"
+                                                                                className="w-auto h-7 px-2 text-xs"
+                                                                            />
+                                                                        )
+                                                                    })()}
+                                                                    <PaymentRecorder
+                                                                        campoutId={campout.id}
+                                                                        adultId={a.adult.id}
+                                                                        defaultAmount={remainingDue}
+                                                                        label="Record Pay"
+                                                                        className="h-7 px-2 text-xs"
+                                                                    />
+                                                                </>
                                                             )}
 
                                                             {/* Self Pay with IBA or Cash */}
-                                                            {isMe && campout.status === 'READY_FOR_PAYMENT' && !isPaid && (
-                                                                <div className="flex flex-col items-end gap-2 mt-2 w-full max-w-[140px]">
+                                                            {isMe && campout.status === 'READY_FOR_PAYMENT' && !isClosed && (
+                                                                <div className="flex items-center gap-2">
                                                                     {(() => {
                                                                         const hasFunds = serializedLinkedScouts.some((s: any) => Number(s.ibaBalance) >= costPerPerson)
                                                                         const isDisabled = serializedLinkedScouts.length === 0 || !hasFunds
@@ -527,6 +579,7 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
                                                                                 beneficiaryId={a.adult.id}
                                                                                 disabled={isDisabled}
                                                                                 label="Pay with IBA"
+                                                                                className="h-7 px-2 text-xs"
                                                                             />
                                                                         )
                                                                     })()}
@@ -535,13 +588,13 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
                                                                         <PaymentRecorder
                                                                             campoutId={campout.id}
                                                                             adultId={a.adult.id}
-                                                                            defaultAmount={costPerPerson}
+                                                                            defaultAmount={remainingDue}
                                                                             label="Pay Cash"
-                                                                            className="w-full"
+                                                                            className="h-7 px-2 text-xs"
                                                                             variant="outline"
                                                                         />
                                                                     ) : (
-                                                                        <PayCashButton message={`Please pay ${formatCurrency(costPerPerson)} cash to the organizer.`} />
+                                                                        <PayCashButton message={`Please pay ${formatCurrency(remainingDue)} cash to the organizer.`} />
                                                                     )}
                                                                 </div>
                                                             )}
@@ -571,7 +624,6 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
                     />
                 </div>
             )}
-
         </div>
     )
 }

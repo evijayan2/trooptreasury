@@ -21,7 +21,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select"
-import { Plus } from "lucide-react"
+import { Plus, X } from "lucide-react"
 
 export function UserForm() {
     const [open, setOpen] = useState(false)
@@ -50,6 +50,16 @@ export function UserForm() {
 
 function UserCreationForm({ onSuccess }: { onSuccess: () => void }) {
     const [state, dispatch, isPending] = useActionState(createUser, undefined)
+    const [role, setRole] = useState("LEADER")
+    const [childScouts, setChildScouts] = useState<string[]>([""])
+
+    const addScoutField = () => setChildScouts([...childScouts, ""])
+    const removeScout = (index: number) => setChildScouts(childScouts.filter((_, i) => i !== index))
+    const updateScoutName = (index: number, value: string) => {
+        const newScouts = [...childScouts]
+        newScouts[index] = value
+        setChildScouts(newScouts)
+    }
 
     useEffect(() => {
         if (state?.success) {
@@ -75,7 +85,7 @@ function UserCreationForm({ onSuccess }: { onSuccess: () => void }) {
             </div>
             <div className="space-y-2">
                 <Label htmlFor="role">Role</Label>
-                <Select name="role" required defaultValue="LEADER">
+                <Select name="role" required defaultValue="LEADER" onValueChange={setRole}>
                     <SelectTrigger>
                         <SelectValue placeholder="Select a role" />
                     </SelectTrigger>
@@ -91,6 +101,33 @@ function UserCreationForm({ onSuccess }: { onSuccess: () => void }) {
                     <p className="text-red-500 text-xs">{state.issues.fieldErrors.role[0]}</p>
                 )}
             </div>
+
+            {role === 'PARENT' && (
+                <div className="space-y-2 p-4 border rounded-md bg-gray-50">
+                    <Label>Scouts associated with this Parent</Label>
+                    <div className="space-y-2">
+                        {childScouts.map((scout, index) => (
+                            <div key={index} className="flex items-center gap-2">
+                                <Input
+                                    name="childScouts"
+                                    value={scout}
+                                    onChange={(e) => updateScoutName(index, e.target.value)}
+                                    placeholder="Scout Name"
+                                    required
+                                />
+                                {childScouts.length > 1 && (
+                                    <Button type="button" variant="ghost" size="icon" onClick={() => removeScout(index)}>
+                                        <X className="h-4 w-4" />
+                                    </Button>
+                                )}
+                            </div>
+                        ))}
+                        <Button type="button" variant="outline" size="sm" onClick={addScoutField}>
+                            <Plus className="mr-2 h-4 w-4" /> Add Scout
+                        </Button>
+                    </div>
+                </div>
+            )}
 
             {state?.error && <p className="text-red-500 text-sm">{state.error}</p>}
 

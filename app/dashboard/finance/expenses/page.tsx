@@ -19,7 +19,7 @@ export default async function ExpensesPage() {
     const scouts = await prisma.scout.findMany({ select: { id: true, name: true } })
     const campouts = await prisma.campout.findMany({ where: { status: { not: "CLOSED" } }, select: { id: true, name: true } })
     const campaigns = await prisma.fundraisingCampaign.findMany({ select: { id: true, name: true } })
-    const activeBudget = await prisma.budget.findFirst({ where: { isActive: true }, include: { categories: true } })
+    const activeBudget = await prisma.budget.findFirst({ where: { status: 'ACTIVE' }, include: { categories: true } })
     const categories = activeBudget ? activeBudget.categories : []
     const troopSettings = await prisma.troopSettings.findFirst()
     const headerInfo = {

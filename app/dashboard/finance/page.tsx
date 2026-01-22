@@ -6,7 +6,7 @@ import { FinanceCard, TransactionItem } from "@/components/finance/finance-card"
 export default async function FinancePage() {
     // Fetch summary stats
     const activeBudget = await prisma.budget.findFirst({
-        where: { isActive: true },
+        where: { status: 'ACTIVE' },
         include: { categories: true }
     })
 
@@ -25,6 +25,9 @@ export default async function FinancePage() {
     let troopExpenses = 0
     let scoutFundraisingShare = 0
     let ibaDepositsTotal = 0
+    let organizerCashTotal = 0
+
+    const organizerCashList: TransactionItem[] = []
 
     transactions.forEach(t => {
         const val = Number(t.amount)
@@ -33,13 +36,16 @@ export default async function FinancePage() {
         switch (t.type) {
             case 'REGISTRATION_INCOME':
             case 'DONATION_IN':
-            case 'EVENT_PAYMENT':
             case 'DUES':
             case 'CAMP_TRANSFER':
             case 'IBA_RECLAIM':
                 troopIncome += val
                 troopList.push({ description: t.description || "No Description", amount: val, date: dateStr })
                 incomeList.push({ description: t.description || "No Description", amount: val, date: dateStr })
+                break
+            case 'EVENT_PAYMENT':
+                organizerCashTotal += val
+                organizerCashList.push({ description: t.description || "Organizer Collected Cash", amount: val, date: dateStr })
                 break
             case 'FUNDRAISING_INCOME':
                 const ibaPercent = t.fundraisingCampaign?.ibaPercentage || 0
@@ -60,6 +66,7 @@ export default async function FinancePage() {
                 break
             case 'EXPENSE':
             case 'REIMBURSEMENT':
+            case 'TROOP_PAYMENT':
                 troopExpenses += val
                 troopList.push({ description: t.description || "No Description", amount: -val, date: dateStr })
                 expenseList.push({ description: t.description || "No Description", amount: val, date: dateStr })
@@ -157,6 +164,18 @@ export default async function FinancePage() {
                     headerInfo={headerInfo}
                 />
             </div>
+            {organizerCashTotal > 0 && (
+                <div className="grid gap-4 md:grid-cols-1">
+                    <FinanceCard
+                        title="Organizer Collected Cash"
+                        value={organizerCashTotal}
+                        description="Cash held by Organizers (Audit Only)"
+                        icon={<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" className="h-4 w-4 text-muted-foreground"><path d="M12 2v20M12 12h.01" /></svg>}
+                        items={organizerCashList}
+                        headerInfo={headerInfo}
+                    />
+                </div>
+            )}
 
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                 <FinanceCard

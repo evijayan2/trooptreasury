@@ -29,7 +29,7 @@ export default async function FinanceLayout({
                     <NavLink href="/dashboard/finance">Overview</NavLink>
                     <NavLink href="/dashboard/finance/budget">Budget</NavLink>
                     <NavLink href="/dashboard/finance/fundraising">Fundraising</NavLink>
-                    <NavLink href="/dashboard/finance/expenses">Expenses</NavLink>
+                    <NavLink href="/dashboard/finance/expenses">Expenses & Income</NavLink>
                     <NavLink href="/dashboard/finance/dues">Dues</NavLink>
                     {session.user.role === 'ADMIN' || session.user.role === 'FINANCIER' ? (
                         <NavLink href="/dashboard/finance/iba-setup">IBA Setup</NavLink>

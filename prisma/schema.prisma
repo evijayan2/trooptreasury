@@ -44,6 +44,7 @@ model Scout {
   parentLinks  ParentScout[]
   user         User?          @relation(fields: [userId], references: [id])
   transactions Transaction[]
+  email        String?        @unique
 }
 
 model ParentScout {
@@ -137,16 +138,17 @@ model TroopSettings {
   rolePermissions       Json?
   sessionTimeoutMinutes Int      @default(15)
   updatedAt             DateTime @updatedAt
-  annualDuesAmount      Decimal  @default(150.00) @db.Decimal(10, 2)
+
 }
 
 model Budget {
   id         String           @id @default(uuid())
   year       String
-  isActive   Boolean          @default(false)
-  createdAt  DateTime         @default(now())
-  updatedAt  DateTime         @updatedAt
-  categories BudgetCategory[]
+  status     BudgetStatus     @default(DRAFT)
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  annualDuesAmount Decimal        @default(150.00) @db.Decimal(10, 2)
+  categories     BudgetCategory[]
 }
 
 model BudgetCategory {
@@ -211,6 +213,7 @@ enum TransactionType {
   DUES
   IBA_RECLAIM
   EVENT_PAYMENT
+  TROOP_PAYMENT
   IBA_DEPOSIT
 }
 
@@ -224,4 +227,10 @@ enum BudgetCategoryType {
   INCOME
   EXPENSE
   BOTH
+}
+
+enum BudgetStatus {
+  DRAFT
+  ACTIVE
+  CLOSED
 }

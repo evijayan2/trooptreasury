@@ -23,10 +23,18 @@ export function FinancialReport({ transactions, expenses }: FinancialReportProps
         .reduce((sum, t) => sum + Number(t.amount), 0)
 
     const cashIncome = transactions
-        .filter(t => ["EVENT_PAYMENT", "REGISTRATION_INCOME"].includes(t.type) && t.status === "APPROVED")
+        .filter(t => ["REGISTRATION_INCOME"].includes(t.type) && t.status === "APPROVED")
         .reduce((sum, t) => sum + Number(t.amount), 0)
 
-    const totalIncome = ibaIncome + cashIncome
+    const organizerCash = transactions
+        .filter(t => t.type === "EVENT_PAYMENT" && t.status === "APPROVED")
+        .reduce((sum, t) => sum + Number(t.amount), 0)
+
+    const subsidyIncome = transactions
+        .filter(t => t.type.startsWith("TROOP") && t.status === "APPROVED")
+        .reduce((sum, t) => sum + Number(t.amount), 0)
+
+    const totalIncome = ibaIncome + cashIncome + subsidyIncome + organizerCash
 
     // 2. Calculate Expenses
     const totalExpenses = expenses.reduce((sum, e) => sum + Number(e.amount), 0)
@@ -35,22 +43,30 @@ export function FinancialReport({ transactions, expenses }: FinancialReportProps
     // Map adultId -> { name, spent, reimbursed }
     const organizerStats = new Map<string, { name: string, spent: number, reimbursed: number }>()
 
-    // Process Expenses
+    // Process Expenses to track Spending
     expenses.forEach(e => {
         if (!e.adult) return
         const stat = organizerStats.get(e.adultId) || { name: e.adult.name, spent: 0, reimbursed: 0 }
         stat.spent += Number(e.amount)
-        if (e.isReimbursed) {
-            stat.reimbursed += Number(e.amount)
-        }
         organizerStats.set(e.adultId, stat)
     })
+
+    // Process Transactions to track Actual Reimbursements
+    transactions
+        .filter(t => t.type === "REIMBURSEMENT" && t.status === "APPROVED")
+        .forEach(t => {
+            if (!t.userId) return
+            // Note: If an organizer has no expenses but got reimbursed (unlikely?), we create an entry
+            const stat = organizerStats.get(t.userId) || { name: t.user?.name || "Unknown", spent: 0, reimbursed: 0 }
+            stat.reimbursed += Number(t.amount)
+            organizerStats.set(t.userId, stat)
+        })
 
     const organizerList = Array.from(organizerStats.values())
 
     // 4. Detailed Payment Log
     const paymentLog = transactions
-        .filter(t => ["CAMP_TRANSFER", "EVENT_PAYMENT", "REGISTRATION_INCOME"].includes(t.type) && t.status === "APPROVED")
+        .filter(t => (["CAMP_TRANSFER", "EVENT_PAYMENT", "REGISTRATION_INCOME"].includes(t.type) || t.type.startsWith("TROOP")) && t.status === "APPROVED")
         .map(t => ({
             id: t.id,
             date: t.createdAt,
@@ -60,7 +76,7 @@ export function FinancialReport({ transactions, expenses }: FinancialReportProps
                 ? `${t.user.name} (from ${t.scout.name} IBA)`
                 : (t.scout?.name || t.user?.name || "Unknown"),
             amount: Number(t.amount),
-            type: t.type === "CAMP_TRANSFER" ? "IBA Transfer" : "Cash/Direct"
+            type: t.type === "CAMP_TRANSFER" ? "IBA Transfer" : t.type.startsWith("TROOP") ? "Troop Subsidy" : "Cash/Direct"
         }))
         .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
 
@@ -78,7 +94,9 @@ export function FinancialReport({ transactions, expenses }: FinancialReportProps
                         <div className="text-2xl font-bold text-green-600">{formatCurrency(totalIncome)}</div>
                         <div className="text-xs text-gray-500 mt-1 flex flex-col gap-1">
                             <span>IBA: {formatCurrency(ibaIncome)}</span>
-                            <span>Cash: {formatCurrency(cashIncome)}</span>
+                            <span>Cash (Bank): {formatCurrency(cashIncome)}</span>
+                            {subsidyIncome > 0 && <span>Subsidy: {formatCurrency(subsidyIncome)}</span>}
+                            {organizerCash > 0 && <span>Org. Cash: {formatCurrency(organizerCash)}</span>}
                         </div>
                     </CardContent>
                 </Card>

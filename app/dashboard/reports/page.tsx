@@ -65,11 +65,13 @@ export default async function Page({ searchParams }: ReportsPageProps) {
         switch (t.type) {
             case 'REGISTRATION_INCOME':
             case 'DONATION_IN':
-            case 'EVENT_PAYMENT':
             case 'DUES':
             case 'CAMP_TRANSFER':
             case 'IBA_RECLAIM':
                 totalTroopIncome += val
+                break
+            case 'EVENT_PAYMENT':
+                // Exclude cash payments from Bank Income
                 break
             case 'FUNDRAISING_INCOME':
                 const ibaPercent = t.fundraisingCampaign?.ibaPercentage || 0
@@ -90,7 +92,7 @@ export default async function Page({ searchParams }: ReportsPageProps) {
     })
 
     const netTroopPeriod = totalTroopIncome - totalExpense
-    const incomeTypes = ["REGISTRATION_INCOME", "FUNDRAISING_INCOME", "DONATION_IN", "DUES", "EVENT_PAYMENT", "CAMP_TRANSFER", "IBA_RECLAIM"]
+    const incomeTypes = ["REGISTRATION_INCOME", "FUNDRAISING_INCOME", "DONATION_IN", "DUES", "CAMP_TRANSFER", "IBA_RECLAIM"]
     const expenseTypes = ["EXPENSE", "REIMBURSEMENT"]
 
     // Helper to format type

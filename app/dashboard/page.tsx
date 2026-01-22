@@ -74,8 +74,8 @@ export default async function Page() {
             })
 
             // Add Dues Card if needed
-            const troopSettings = await prisma.troopSettings.findFirst()
-            const targetDues = Number(troopSettings?.annualDuesAmount || 150)
+            const activeBudget = await prisma.budget.findFirst({ where: { status: 'ACTIVE' } })
+            const targetDues = Number(activeBudget?.annualDuesAmount || 150)
             const paidDues = scout.transactions.reduce((sum, t) => sum + Number(t.amount), 0)
             if (paidDues < targetDues) {
                 cards.push({

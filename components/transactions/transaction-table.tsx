@@ -10,7 +10,7 @@ import { formatCurrency, formatDateTimeEST } from "@/lib/utils"
 // import { Transaction } from "@prisma/client" // We'll verify type usage
 import { ExpenseEntryActions } from "./expense-entry-actions"
 
-export function TransactionTable({ transactions }: { transactions: any[] }) {
+export function TransactionTable({ transactions, isReadOnly = false }: { transactions: any[], isReadOnly?: boolean }) {
     return (
         <Table>
             <TableHeader>
@@ -39,7 +39,7 @@ export function TransactionTable({ transactions }: { transactions: any[] }) {
                             </TableCell>
                             <TableCell>{tx.status}</TableCell>
                             <TableCell>
-                                {(tx.type === 'EXPENSE' || tx.entryType === 'ADULT_EXPENSE') && (
+                                {!isReadOnly && (tx.type === 'EXPENSE' || tx.entryType === 'ADULT_EXPENSE') && (
                                     <ExpenseEntryActions
                                         id={tx.id}
                                         type={tx.entryType === 'ADULT_EXPENSE' ? 'ADULT_EXPENSE' : 'TRANSACTION'}

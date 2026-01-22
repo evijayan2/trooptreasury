@@ -2,9 +2,9 @@
 
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
-import { batchIBAPayout, payoutOrganizers, closeCampout } from "@/app/actions"
+import { payoutOrganizers, closeCampout } from "@/app/actions"
 import { toast } from "sonner"
-import { Loader2, Zap, CircleDollarSign, Lock } from "lucide-react"
+import { Loader2, CircleDollarSign, Lock } from "lucide-react"
 import {
     Dialog,
     DialogContent,
@@ -17,7 +17,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 
-type PayoutAction = "iba" | "payout" | "close"
+type PayoutAction = "payout" | "close"
 
 interface OrganizerPayout {
     adultId: string
@@ -53,8 +53,7 @@ export function PayoutControls({
         setLoading(action)
         try {
             let res: any
-            if (action === "iba") res = await batchIBAPayout(campoutId)
-            else if (action === "payout") res = await payoutOrganizers(campoutId, payoutAmounts)
+            if (action === "payout") res = await payoutOrganizers(campoutId, payoutAmounts)
             else if (action === "close") res = await closeCampout(campoutId)
 
             if (res.success) {
@@ -78,11 +77,7 @@ export function PayoutControls({
     }
 
     const actionData = {
-        iba: {
-            title: "Batch Collect IBA",
-            description: "Are you sure you want to collect IBA payments for all participants with outstanding balances?",
-            buttonClass: "bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border-indigo-200"
-        },
+
         payout: {
             title: "Payout Organizers",
             description: "Distribute collected funds to organizers. You can adjust the amounts below.",
@@ -95,25 +90,19 @@ export function PayoutControls({
         }
     }
 
+    const totalPending = organizers.reduce((sum, org) => sum + org.pendingExpense, 0)
+    const canPayout = totalPending > 0
+
     return (
         <>
             <div className="flex flex-wrap gap-2">
-                <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setConfirmAction("iba")}
-                    disabled={loading !== null}
-                    className={actionData.iba.buttonClass}
-                >
-                    {loading === "iba" ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Zap className="w-4 h-4 mr-2" />}
-                    Batch Collect IBA
-                </Button>
+
 
                 <Button
                     size="sm"
                     variant="outline"
                     onClick={handleOpenPayout}
-                    disabled={loading !== null}
+                    disabled={loading !== null || !canPayout}
                     className={actionData.payout.buttonClass}
                 >
                     {loading === "payout" ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <CircleDollarSign className="w-4 h-4 mr-2" />}
@@ -124,7 +113,7 @@ export function PayoutControls({
                     size="sm"
                     variant="destructive"
                     onClick={() => setConfirmAction("close")}
-                    disabled={loading !== null}
+                    disabled={loading !== null || totalPending > 0}
                 >
                     {loading === "close" ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Lock className="w-4 h-4 mr-2" />}
                     Close Campout
@@ -145,27 +134,37 @@ export function PayoutControls({
                             {organizers.length === 0 ? (
                                 <p className="text-sm text-gray-500 text-center">No organizers found with pending expenses.</p>
                             ) : (
-                                organizers.map(org => (
-                                    <div key={org.adultId} className="flex items-center justify-between gap-4 border-b pb-4 last:border-0 last:pb-0">
-                                        <div className="flex-1 min-w-0">
-                                            <Label className="text-sm font-medium truncate block">{org.adultName}</Label>
-                                            <span className="text-xs text-gray-500">Log: ${org.pendingExpense.toFixed(2)}</span>
+                                organizers.map(org => {
+                                    // Skip organizers with 0 pending expense
+                                    if (org.pendingExpense <= 0) return null
+
+                                    return (
+                                        <div key={org.adultId} className="flex items-center justify-between gap-4 border-b pb-4 last:border-0 last:pb-0">
+                                            <div className="flex-1 min-w-0">
+                                                <Label className="text-sm font-medium truncate block">{org.adultName}</Label>
+                                                <span className="text-xs text-gray-500">Log: ${org.pendingExpense.toFixed(2)}</span>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-sm text-gray-400">$</span>
+                                                <Input
+                                                    type="number"
+                                                    step="0.01"
+                                                    max={org.pendingExpense}
+                                                    className="w-24 h-8 text-right"
+                                                    value={payoutAmounts[org.adultId] ?? ""}
+                                                    onChange={(e) => {
+                                                        let val = parseFloat(e.target.value) || 0
+                                                        // Enforce max amount (cap at pendingExpense)
+                                                        if (val > org.pendingExpense) val = org.pendingExpense
+                                                        if (val < 0) val = 0
+
+                                                        setPayoutAmounts(prev => ({ ...prev, [org.adultId]: val }))
+                                                    }}
+                                                />
+                                            </div>
                                         </div>
-                                        <div className="flex items-center gap-2">
-                                            <span className="text-sm text-gray-400">$</span>
-                                            <Input
-                                                type="number"
-                                                step="0.01"
-                                                className="w-24 h-8 text-right"
-                                                value={payoutAmounts[org.adultId] ?? ""}
-                                                onChange={(e) => {
-                                                    const val = parseFloat(e.target.value) || 0
-                                                    setPayoutAmounts(prev => ({ ...prev, [org.adultId]: val }))
-                                                }}
-                                            />
-                                        </div>
-                                    </div>
-                                ))
+                                    )
+                                })
                             )}
                         </div>
                     )}

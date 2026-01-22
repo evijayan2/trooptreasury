@@ -7,7 +7,7 @@ import { Check } from "lucide-react"
 import { ExpenseEntryActions } from "@/components/transactions/expense-entry-actions"
 import { toast } from "sonner"
 
-export function PendingReimbursements({ expenses }: { expenses: any[] }) {
+export function PendingReimbursements({ expenses, isReadOnly = false }: { expenses: any[], isReadOnly?: boolean }) {
     if (expenses.length === 0) return null
 
     const handleApprove = async (id: string) => {
@@ -31,15 +31,19 @@ export function PendingReimbursements({ expenses }: { expenses: any[] }) {
                             <p className="text-xs text-gray-500">{expense.adult?.name} • {formatCurrency(Number(expense.amount))}</p>
                         </div>
                         <div className="flex items-center gap-1">
-                            <ExpenseEntryActions
-                                id={expense.id}
-                                type="ADULT_EXPENSE"
-                                initialDescription={expense.description}
-                                initialAmount={Number(expense.amount)}
-                            />
-                            <Button size="sm" variant="ghost" onClick={() => handleApprove(expense.id)} title="Approve">
-                                <Check className="w-4 h-4 text-green-600" />
-                            </Button>
+                            {!isReadOnly && (
+                                <>
+                                    <ExpenseEntryActions
+                                        id={expense.id}
+                                        type="ADULT_EXPENSE"
+                                        initialDescription={expense.description}
+                                        initialAmount={Number(expense.amount)}
+                                    />
+                                    <Button size="sm" variant="ghost" onClick={() => handleApprove(expense.id)} title="Approve">
+                                        <Check className="w-4 h-4 text-green-600" />
+                                    </Button>
+                                </>
+                            )}
                         </div>
                     </div>
                 ))}

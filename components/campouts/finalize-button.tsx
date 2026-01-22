@@ -9,14 +9,23 @@ import {
     TooltipContent,
     TooltipTrigger,
 } from "@/components/ui/tooltip"
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+    AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
 import { toast } from "sonner"
 
 export function FinalizeCampoutButton({ campoutId }: { campoutId: string }) {
     const [loading, setLoading] = useState(false)
 
     const handleFinalize = async () => {
-        if (!confirm("Are you sure you want to finalize costs? This will lock expenses and open payment collection.")) return
-
         setLoading(true)
         const result = await finalizeCampoutCosts(campoutId)
         if (result.error) {
@@ -28,16 +37,32 @@ export function FinalizeCampoutButton({ campoutId }: { campoutId: string }) {
     }
 
     return (
-        <Tooltip>
-            <TooltipTrigger asChild>
-                <Button onClick={handleFinalize} disabled={loading} variant="default" className="bg-primary hover:bg-primary/90">
-                    <CheckCircle className="w-4 h-4 mr-2" />
-                    {loading ? "Finalizing..." : "Finalize & Open Payments"}
-                </Button>
-            </TooltipTrigger>
-            <TooltipContent>
-                <p>Lock expenses and enable payments for this campout</p>
-            </TooltipContent>
-        </Tooltip>
+        <AlertDialog>
+            <Tooltip>
+                <TooltipTrigger asChild>
+                    <AlertDialogTrigger asChild>
+                        <Button disabled={loading} variant="default" className="bg-primary hover:bg-primary/90">
+                            <CheckCircle className="w-4 h-4 mr-2" />
+                            {loading ? "Finalizing..." : "Finalize & Open Payments"}
+                        </Button>
+                    </AlertDialogTrigger>
+                </TooltipTrigger>
+                <TooltipContent>
+                    <p>Lock expenses and enable payments for this campout</p>
+                </TooltipContent>
+            </Tooltip>
+            <AlertDialogContent>
+                <AlertDialogHeader>
+                    <AlertDialogTitle>Finalize Campout Costs?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                        This action will lock all expense logging and roster modifications. It will calculate the final cost per person and open the campout for payment collection. This cannot be undone.
+                    </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction onClick={handleFinalize}>Finalize & Open Payments</AlertDialogAction>
+                </AlertDialogFooter>
+            </AlertDialogContent>
+        </AlertDialog>
     )
 }

@@ -4,8 +4,11 @@ import { redirect } from "next/navigation"
 import { formatCurrency } from "@/lib/utils"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { TransactionTable } from "@/components/transactions/transaction-table"
-import { ArrowLeft } from "lucide-react"
+import { ArrowLeft, Mail, UserPlus } from "lucide-react"
 import Link from "next/link"
+import { Button } from "@/components/ui/button"
+import { inviteUserForScout, updateScoutEmail } from "@/app/actions"
+import { ScoutEmailForm } from "@/components/scouts/ScoutEmailForm"
 
 export default async function ScoutPage({ params }: { params: Promise<{ id: string }> }) {
     const { id } = await params
@@ -87,6 +90,24 @@ export default async function ScoutPage({ params }: { params: Promise<{ id: stri
                         </div>
                     </CardContent>
                 </Card>
+
+                {session.user.role !== 'SCOUT' && (
+                    <Card>
+                        <CardHeader className="pb-2">
+                            <CardTitle className="text-sm font-medium text-gray-500">
+                                User Account
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            <ScoutEmailForm
+                                scoutId={scout.id}
+                                // @ts-ignore
+                                initialEmail={scout.email}
+                                hasUser={!!scout.userId}
+                            />
+                        </CardContent>
+                    </Card>
+                )}
             </div>
 
             <div className="space-y-4">
@@ -95,6 +116,6 @@ export default async function ScoutPage({ params }: { params: Promise<{ id: stri
                     <TransactionTable transactions={formattedTransactions} />
                 </div>
             </div>
-        </div>
+        </div >
     )
 }

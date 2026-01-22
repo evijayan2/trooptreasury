@@ -171,11 +171,13 @@ export async function restoreFromReplayJson(jsonString: string) {
           where: { id: budget.id },
           update: {
             ...budget,
+            annualDuesAmount: new Decimal(budget.annualDuesAmount),
             createdAt: new Date(budget.createdAt),
             updatedAt: new Date(budget.updatedAt),
           },
           create: {
             ...budget,
+            annualDuesAmount: new Decimal(budget.annualDuesAmount),
             createdAt: new Date(budget.createdAt),
             updatedAt: new Date(budget.updatedAt),
           }

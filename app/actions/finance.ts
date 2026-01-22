@@ -11,7 +11,8 @@ import { BudgetCategoryType, TransactionType, FundraisingStatus } from "@prisma/
 
 const budgetSchema = z.object({
     year: z.string().min(1, "Year is required (e.g. 2025-2026)"),
-    isActive: z.boolean().optional(),
+    status: z.enum(["DRAFT", "ACTIVE", "CLOSED"]).optional(),
+    annualDuesAmount: z.string().refine(val => !isNaN(Number(val)), "Invalid amount"),
 })
 
 export async function upsertBudget(prevState: any, formData: FormData) {
@@ -22,7 +23,8 @@ export async function upsertBudget(prevState: any, formData: FormData) {
 
     const rawData = {
         year: formData.get("year"),
-        isActive: formData.get("isActive") === "on",
+        status: formData.get("isActive") === "on" ? "ACTIVE" : "DRAFT",
+        annualDuesAmount: formData.get("annualDuesAmount") || "150.00"
     }
 
     // If updating, we might need ID. For now, let's assume creating new or finding by Year?
@@ -34,24 +36,30 @@ export async function upsertBudget(prevState: any, formData: FormData) {
         return { error: "Invalid fields", issues: validatedFields.error.flatten() }
     }
 
-    const { year, isActive } = validatedFields.data
+    const { year, status, annualDuesAmount } = validatedFields.data
 
     try {
         if (id) {
             await prisma.budget.update({
                 where: { id },
-                data: { year, isActive }
+                data: { year, status: status as any, annualDuesAmount: new Decimal(annualDuesAmount) }
             })
         } else {
-            // If setting active, deactivate others?
-            if (isActive) {
+            // If setting active, deactivate others? -> Set them to CLOSED or keep as previously active?
+            // "every year one budget should be active". So if we make this one ACTIVE, others become CLOSED (or just not Active).
+            // Let's set other ACTIVE budgets to CLOSED for simplicity, or just leave them?
+            // "once the budget is active... we must have option to delete, active and closed we should not delete"
+            // Let's assume strict single ACTIVE.
+            if (status === 'ACTIVE') {
+                // Deactivate currently active budget to CLOSED? Or DRAFT? 
+                // Usually previous year -> CLOSED.
                 await prisma.budget.updateMany({
-                    where: { isActive: true },
-                    data: { isActive: false }
+                    where: { status: 'ACTIVE' },
+                    data: { status: 'CLOSED' }
                 })
             }
             await prisma.budget.create({
-                data: { year, isActive: isActive || false }
+                data: { year, status: status as any, annualDuesAmount: new Decimal(annualDuesAmount) }
             })
         }
         revalidatePath("/dashboard/finance/budget")
@@ -246,7 +254,10 @@ export async function recordTransaction(prevState: any, formData: FormData) {
                     amount: new Decimal(amount),
                     type,
                     description,
-                    createdAt: new Date(date),
+                    createdAt: (() => {
+                        const today = new Date().toISOString().split('T')[0]
+                        return date === today ? new Date() : new Date(date)
+                    })(),
                     scoutId: scoutId || null,
                     campoutId: campoutId || null,
                     budgetCategoryId: budgetCategoryId || null,
@@ -384,6 +395,11 @@ export async function deleteBudget(id: string) {
     }
 
     try {
+        const budget = await prisma.budget.findUnique({ where: { id } })
+        if (!budget) return { error: "Budget not found" }
+        if (budget.status !== 'DRAFT') {
+            return { error: "Cannot delete Active or Closed budgets." }
+        }
         // Check if any categories in this budget have linked transactions
         const linkedTransactions = await prisma.transaction.count({
             where: {
@@ -413,6 +429,34 @@ export async function deleteBudget(id: string) {
     } catch (error) {
         console.error("Delete Budget Error:", error)
         return { error: "An unexpected error occurred while deleting the budget" }
+    }
+}
+
+export async function updateBudgetStatus(id: string, status: string) {
+    const session = await auth()
+    if (!session || !["ADMIN", "FINANCIER"].includes(session.user.role)) {
+        return { error: "Unauthorized" }
+    }
+
+    try {
+        if (status === 'ACTIVE') {
+            // Deactivate others
+            await prisma.budget.updateMany({
+                where: { status: 'ACTIVE' },
+                data: { status: 'CLOSED' }
+            })
+        }
+
+        await prisma.budget.update({
+            where: { id },
+            data: { status: status as any }
+        })
+
+        revalidatePath("/dashboard/finance/budget")
+        return { success: true, message: `Budget marked as ${status}` }
+    } catch (error) {
+        console.error("Update Budget Status Error:", error)
+        return { error: "Failed to update status" }
     }
 }
 

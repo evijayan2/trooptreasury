@@ -5,6 +5,8 @@ import { ScoutTable } from "@/components/scouts/scout-table"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { DataTableExport } from "@/components/ui/data-table-export"
 import { formatCurrency } from "@/lib/utils"
+import { AddScoutDialog } from "@/components/scouts/AddScoutDialog"
+import { ImportScoutsButton } from "@/components/scouts/ImportScoutsButton"
 
 export const dynamic = 'force-dynamic'
 
@@ -17,6 +19,10 @@ export default async function Page() {
         district: troopSettings?.district || "",
         address: troopSettings?.address || ""
     }
+    const allScoutsList = await prisma.scout.findMany({
+        select: { id: true, name: true },
+        orderBy: { name: 'asc' }
+    })
 
     const session = await auth()
     const role = session?.user?.role || "SCOUT"
@@ -51,9 +57,20 @@ export default async function Page() {
         orderBy: { name: 'asc' },
     })
 
+    // Identify linked scouts for the current user (regardless of role)
+    const linkedScoutIds = new Set<string>()
+    if (session?.user?.id) {
+        const links = await prisma.parentScout.findMany({
+            where: { parentId: session.user.id },
+            select: { scoutId: true }
+        })
+        links.forEach(l => linkedScoutIds.add(l.scoutId))
+    }
+
     const scouts = rawScouts.map(scout => ({
         ...scout,
         ibaBalance: Number(scout.ibaBalance),
+        isLinked: linkedScoutIds.has(scout.id)
     }))
 
     const exportData = scouts.map(s => ({
@@ -62,25 +79,43 @@ export default async function Page() {
         formattedBalance: formatCurrency(s.ibaBalance)
     }))
 
+    // Fetch parents for AddScoutDialog (for admin/leader/financier)
+    let potentialParents: { id: string, name: string | null }[] = []
+    if (['ADMIN', 'FINANCIER', 'LEADER'].includes(role)) {
+        potentialParents = await prisma.user.findMany({
+            where: { role: { not: 'SCOUT' } },
+            select: { id: true, name: true },
+            orderBy: { name: 'asc' }
+        })
+    }
+
     return (
         <div className="space-y-6">
             <div className="flex items-center justify-between">
                 <h1 className="text-2xl font-bold">Scouts</h1>
+                {['ADMIN', 'FINANCIER', 'LEADER'].includes(role) && (
+                    <div className="flex gap-2">
+                        <ImportScoutsButton />
+                        <AddScoutDialog parents={potentialParents} />
+                    </div>
+                )}
             </div>
 
             <Card>
                 <CardHeader className="flex flex-row items-center justify-between">
                     <CardTitle>Roster {role === 'PARENT' ? '(My Scouts)' : ''}</CardTitle>
-                    <DataTableExport
-                        data={exportData}
-                        columns={[
-                            { header: "Name", accessorKey: "name" },
-                            { header: "IBA Balance", accessorKey: "formattedBalance" }
-                        ]}
-                        filename={`TroopTreasury_ScoutRoster_${new Date().toISOString().split('T')[0]}`}
-                        title="Scout Roster"
-                        headerInfo={headerInfo}
-                    />
+                    <div className="flex gap-2">
+                        <DataTableExport
+                            data={exportData}
+                            columns={[
+                                { header: "Name", accessorKey: "name" },
+                                { header: "IBA Balance", accessorKey: "formattedBalance" }
+                            ]}
+                            filename={`TroopTreasury_ScoutRoster_${new Date().toISOString().split('T')[0]}`}
+                            title="Scout Roster"
+                            headerInfo={headerInfo}
+                        />
+                    </div>
                 </CardHeader>
                 <CardContent>
                     <ScoutTable scouts={scouts} />

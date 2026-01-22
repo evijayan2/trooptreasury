@@ -12,7 +12,6 @@ export default async function Page() {
     const settings = await prisma.troopSettings.findFirst()
     const serializedSettings = settings ? {
         ...settings,
-        annualDuesAmount: settings.annualDuesAmount.toString()
     } : undefined
 
     return (

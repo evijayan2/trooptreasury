@@ -42,24 +42,36 @@ export function ExpenseLogger({
     const [open, setOpen] = useState(false)
     const [error, setError] = useState("")
     const [paidBy, setPaidBy] = useState(currentUserId || "")
+    const [loading, setLoading] = useState(false)
 
-    const handleSubmit = async (formData: FormData) => {
+    const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+        e.preventDefault()
+        setError("")
+
         if (!paidBy) {
             setError("Please select who paid.")
             return
         }
 
-        // Since Select is controlled state, we need to append it or rely on hidden input.
-        // Easiest is to just pass it or ensure Select renders a hidden input (radix might not).
+        setLoading(true)
+        const formData = new FormData(e.currentTarget)
+        // Ensure paidBy is included
         formData.set("paidBy", paidBy)
 
-        const result = await logCampoutExpense(null, formData)
-        if (result.error) {
-            setError(result.error)
-        } else {
-            setOpen(false)
-            setError("")
-            // Reset description/amount? Form resets on re-render if key changes or manual reset.
+        try {
+            const result = await logCampoutExpense(null, formData)
+            if (result.error) {
+                setError(result.error)
+            } else {
+                setOpen(false)
+                setError("")
+                // Reset form manually if needed, but Dialog unmounting/remounting handles it usually
+            }
+        } catch (err) {
+            console.error(err)
+            setError("Failed to log expense")
+        } finally {
+            setLoading(false)
         }
     }
 
@@ -90,7 +102,7 @@ export function ExpenseLogger({
                 <DialogHeader>
                     <DialogTitle>Log Campout Expense</DialogTitle>
                 </DialogHeader>
-                <form action={handleSubmit} className="space-y-4 pt-4">
+                <form onSubmit={handleSubmit} className="space-y-4 pt-4">
                     <input type="hidden" name="campoutId" value={campoutId} />
 
                     <div className="space-y-2">
@@ -133,7 +145,9 @@ export function ExpenseLogger({
 
                     {error && <p className="text-red-500 text-sm">{error}</p>}
 
-                    <Button type="submit" className="w-full">Submit Expense</Button>
+                    <Button type="submit" className="w-full" disabled={loading}>
+                        {loading ? "Logging..." : "Submit Expense"}
+                    </Button>
                 </form>
             </DialogContent>
         </Dialog>

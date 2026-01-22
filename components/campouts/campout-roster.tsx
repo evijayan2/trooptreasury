@@ -20,12 +20,26 @@ import {
 } from "@/components/ui/select"
 import { Plus } from "lucide-react"
 import { RemoveParticipantButton } from "./remove-participant-button"
-
+import { IBAPayment } from "./iba-payment"
 import { PaymentRecorder } from "./payment-recorder"
 import { formatCurrency } from "@/lib/utils"
 import { toast } from "sonner"
 
-export function CampoutRoster({ campoutId, registeredScouts, allScouts, canEdit = false, costPerPerson = 0 }: { campoutId: string, registeredScouts: any[], allScouts: any[], canEdit?: boolean, costPerPerson?: number }) {
+export function CampoutRoster({
+    campoutId,
+    registeredScouts,
+    allScouts,
+    canEdit = false,
+    costPerPerson = 0,
+    campoutStatus = "OPEN"
+}: {
+    campoutId: string,
+    registeredScouts: any[],
+    allScouts: any[],
+    canEdit?: boolean,
+    costPerPerson?: number,
+    campoutStatus?: string
+}) {
     const [selectedScout, setSelectedScout] = useState<string>("")
     const [open, setOpen] = useState(false)
 
@@ -44,11 +58,13 @@ export function CampoutRoster({ campoutId, registeredScouts, allScouts, canEdit 
         }
     }
 
+    const canModifyRoster = canEdit && campoutStatus === "OPEN"
+
     return (
         <div className="space-y-4">
             <div className="flex justify-between items-center">
                 <h3 className="text-lg font-medium">Scouts ({registeredScouts.length})</h3>
-                {canEdit && (
+                {canModifyRoster && (
                     <Dialog open={open} onOpenChange={setOpen}>
                         <DialogTrigger asChild>
                             <Button variant="outline" size="sm"><Plus className="w-4 h-4 mr-2" /> Add Scout</Button>
@@ -84,29 +100,39 @@ export function CampoutRoster({ campoutId, registeredScouts, allScouts, canEdit 
                 <p className="text-sm text-gray-500">No scouts registered yet.</p>
             ) : (
                 <ul className="space-y-2">
-                    {registeredScouts.map(({ scout, isPaid }) => (
-                        <li key={scout.id} className="flex justify-between items-center p-2 bg-gray-50 dark:bg-muted rounded-md text-sm">
+                    {registeredScouts.map(({ scout, isPaid, remainingDue = costPerPerson }) => (
+                        <li key={scout.id} className="flex justify-between items-center p-3 bg-gray-50 dark:bg-muted rounded text-sm">
                             <div className="flex items-center gap-2">
                                 <span>{scout.name}</span>
+                                {canModifyRoster && <RemoveParticipantButton campoutId={campoutId} id={scout.id} type="SCOUT" />}
+                            </div>
+                            <div className="flex items-center gap-2">
                                 {isPaid ? (
                                     <span className="px-2 py-0.5 bg-green-200 text-green-800 rounded text-xs font-bold">PAID</span>
                                 ) : (
-                                    <span className="text-xs text-red-500 font-semibold">{formatCurrency(costPerPerson)} Due</span>
+                                    <span className="text-xs text-red-500 font-semibold">{formatCurrency(remainingDue)} Due</span>
                                 )}
-                            </div>
-                            <div className="flex items-center gap-2">
-                                {canEdit && !isPaid && (
-                                    <PaymentRecorder
-                                        campoutId={campoutId}
-                                        scoutId={scout.id}
-                                        adultName={scout.name}
-                                        defaultAmount={costPerPerson}
-                                        label="Record Pay"
-                                        className="h-7 px-2"
-                                        variant="outline"
-                                    />
+                                {canEdit && !isPaid && campoutStatus !== "OPEN" && (
+                                    <>
+                                        <IBAPayment
+                                            campoutId={campoutId}
+                                            linkedScouts={[scout]}
+                                            defaultAmount={remainingDue}
+                                            disabled={Number(scout.ibaBalance) <= 0}
+                                            label="Pay IBA"
+                                            className="w-auto h-7 px-2 text-xs"
+                                        />
+                                        <PaymentRecorder
+                                            campoutId={campoutId}
+                                            scoutId={scout.id}
+                                            adultName={scout.name}
+                                            defaultAmount={remainingDue}
+                                            label="Record Pay"
+                                            className="h-7 px-2 text-xs"
+                                            variant="outline"
+                                        />
+                                    </>
                                 )}
-                                {canEdit && <RemoveParticipantButton campoutId={campoutId} id={scout.id} type="SCOUT" />}
                             </div>
                         </li>
                     ))}

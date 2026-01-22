@@ -20,11 +20,30 @@ import {
 } from "@/components/ui/select"
 import { Wallet } from "lucide-react"
 import { toast } from "sonner"
+import { cn } from "@/lib/utils"
+import { useRouter } from "next/navigation"
 
-export function IBAPayment({ campoutId, linkedScouts, defaultAmount = 0, beneficiaryId, disabled = false, label = "Pay with IBA" }: { campoutId: string, linkedScouts: any[], defaultAmount?: number, beneficiaryId?: string, disabled?: boolean, label?: string }) {
+export function IBAPayment({
+    campoutId,
+    linkedScouts,
+    defaultAmount = 0,
+    beneficiaryId,
+    disabled = false,
+    label = "Pay with IBA",
+    className
+}: {
+    campoutId: string,
+    linkedScouts: any[],
+    defaultAmount?: number,
+    beneficiaryId?: string,
+    disabled?: boolean,
+    label?: string,
+    className?: string
+}) {
     const [open, setOpen] = useState(false)
     const [selectedScout, setSelectedScout] = useState(linkedScouts[0]?.id || "")
     const [amount, setAmount] = useState(defaultAmount > 0 ? defaultAmount.toFixed(2) : "")
+    const router = useRouter()
 
     const handlePay = async () => {
         if (!selectedScout || !amount) return
@@ -33,6 +52,7 @@ export function IBAPayment({ campoutId, linkedScouts, defaultAmount = 0, benefic
             setOpen(false)
             setAmount("")
             toast.success("Payment Successful")
+            router.refresh()
         } else {
             toast.error(result.error)
         }
@@ -41,7 +61,7 @@ export function IBAPayment({ campoutId, linkedScouts, defaultAmount = 0, benefic
     return (
         <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
-                <Button variant="outline" size="sm" className="w-full" disabled={disabled}>
+                <Button variant="outline" size="sm" className={cn("w-full", className)} disabled={disabled}>
                     <Wallet className="w-4 h-4 mr-2" /> {label}
                 </Button>
             </DialogTrigger>

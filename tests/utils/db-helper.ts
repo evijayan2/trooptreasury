@@ -59,7 +59,7 @@ export async function setupTroopSettings(prisma: PrismaClient) {
                 council: 'Test Council',
                 district: 'Test District',
                 sessionTimeoutMinutes: 15,
-                annualDuesAmount: 150,
+
             },
         });
     }

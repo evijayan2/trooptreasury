@@ -84,7 +84,7 @@ export async function PaymentsDueList({ userId }: { userId: string }) {
             if (isAttending) {
                 const paidAmount = campout.transactions
                     .filter(t =>
-                        ["CAMP_TRANSFER", "EVENT_PAYMENT"].includes(t.type) &&
+                        (["CAMP_TRANSFER", "EVENT_PAYMENT"].includes(t.type) || t.type.startsWith("TROOP")) &&
                         t.scoutId === link.scout.id &&
                         t.status === "APPROVED"
                     )
@@ -108,7 +108,7 @@ export async function PaymentsDueList({ userId }: { userId: string }) {
         if (userAttendee) {
             const paidAmount = campout.transactions
                 .filter(t =>
-                    ["REGISTRATION_INCOME", "CAMP_TRANSFER", "EVENT_PAYMENT"].includes(t.type) &&
+                    (["REGISTRATION_INCOME", "CAMP_TRANSFER", "EVENT_PAYMENT"].includes(t.type) || t.type.startsWith("TROOP")) &&
                     t.userId === userId &&
                     t.status === "APPROVED"
                 )
@@ -141,7 +141,7 @@ export async function PaymentsDueList({ userId }: { userId: string }) {
                     </div>
 
                     <div className="mt-auto pt-2 border-t border-red-100 flex items-center justify-between">
-                        <span className="font-bold text-red-700">{formatCurrency(item.cost)}</span>
+                        <span className="font-bold text-red-700">{formatCurrency(Math.max(0, item.cost - item.paid))}</span>
 
                         <Tooltip>
                             <TooltipTrigger asChild>

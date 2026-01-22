@@ -58,17 +58,7 @@ export function TroopSettingsForm({ initialData, className }: { initialData?: an
                             placeholder="Troop Meeting Address"
                         />
                     </div>
-                    <div className="space-y-2">
-                        <Label htmlFor="annualDuesAmount">Annual Dues Amount ($)</Label>
-                        <Input
-                            id="annualDuesAmount"
-                            name="annualDuesAmount"
-                            type="number"
-                            step="0.01"
-                            defaultValue={initialData?.annualDuesAmount?.toString() || "150.00"}
-                            required
-                        />
-                    </div>
+
                     <div className="space-y-2">
                         <Label htmlFor="sessionTimeoutMinutes">Session Timeout (minutes)</Label>
                         <Input
