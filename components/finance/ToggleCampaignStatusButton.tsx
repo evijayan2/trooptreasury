@@ -1,7 +1,7 @@
 "use client"
 
 import { Button } from "@/components/ui/button"
-import { PlayCircle, StopCircle } from "lucide-react"
+import { StopCircle } from "lucide-react"
 import { toggleFundraisingStatus } from "@/app/actions/finance"
 import { toast } from "sonner"
 import { FundraisingStatus } from "@prisma/client"
@@ -17,7 +17,9 @@ interface ToggleCampaignStatusButtonProps {
 
 export function ToggleCampaignStatusButton({ id, currentStatus, name }: ToggleCampaignStatusButtonProps) {
     const isClosed = currentStatus === 'CLOSED'
-    const actionLabel = isClosed ? "Activate" : "Close"
+    if (isClosed) return null
+
+    const actionLabel = "Close"
 
     const handleToggle = async () => {
         const res = await toggleFundraisingStatus(id)
@@ -32,11 +34,11 @@ export function ToggleCampaignStatusButton({ id, currentStatus, name }: ToggleCa
         <Button
             variant="ghost"
             size="sm"
-            className={isClosed ? "text-green-600 hover:text-green-700 hover:bg-green-50" : "text-amber-600 hover:text-amber-700 hover:bg-amber-50"}
+            className="text-amber-600 hover:text-amber-700 hover:bg-amber-50"
             onClick={handleToggle}
             title={`${actionLabel} Campaign`}
         >
-            {isClosed ? <PlayCircle className="w-4 h-4 mr-1" /> : <StopCircle className="w-4 h-4 mr-1" />}
+            <StopCircle className="w-4 h-4 mr-1" />
             {actionLabel}
         </Button>
     )

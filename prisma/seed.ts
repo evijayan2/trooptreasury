@@ -14,7 +14,7 @@ const prisma = new PrismaClient({ adapter })
 
 async function main() {
     const email = 'admin@example.com'
-    const password = 'Admin123!@#$' // Meets new password requirements
+    const password = 'TroopTreasury2026!' // Meets new password requirements
     const hashedPassword = await bcrypt.hash(password, 10)
 
     const user = await prisma.user.upsert({

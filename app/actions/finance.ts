@@ -134,10 +134,23 @@ const fundraisingSchema = z.object({
     endDate: z.string().optional(),
     goal: z.string().refine(val => !isNaN(Number(val)), "Invalid goal"),
     isComplianceApproved: z.boolean().optional(),
+    type: z.enum(["GENERAL", "PRODUCT_SALE"]).optional(), // Default to GENERAL
+    productName: z.string().optional(),
+    productPrice: z.string().optional(),
+    productCost: z.string().optional(),
+    productIba: z.string().optional(),
     ibaPercentage: z.string().refine(val => {
         const num = Number(val)
         return !isNaN(num) && num >= 0 && num <= 100
     }, "Percentage must be 0-100"),
+}).refine(data => {
+    if (data.type === 'PRODUCT_SALE') {
+        return !!data.productName && !!data.productPrice && !!data.productIba
+    }
+    return true
+}, {
+    message: "Product details are required for Product Sale",
+    path: ["productName"], // Highlight name field
 })
 
 export async function createFundraiser(prevState: any, formData: FormData) {
@@ -153,6 +166,11 @@ export async function createFundraiser(prevState: any, formData: FormData) {
         goal: formData.get("goal"),
         isComplianceApproved: formData.get("isComplianceApproved") === "on",
         ibaPercentage: formData.get("ibaPercentage") || "0",
+        type: formData.get("type") || "GENERAL",
+        productName: formData.get("productName"),
+        productPrice: formData.get("productPrice"),
+        productCost: formData.get("productCost"),
+        productIba: formData.get("productIba"),
     }
 
     const validatedFields = fundraisingSchema.safeParse(rawData)
@@ -160,7 +178,11 @@ export async function createFundraiser(prevState: any, formData: FormData) {
         return { error: "Invalid fields", issues: validatedFields.error.flatten() }
     }
 
-    const { name, startDate, endDate, goal, isComplianceApproved, ibaPercentage } = validatedFields.data
+    if (!validatedFields.success) {
+        return { error: "Invalid fields", issues: validatedFields.error.flatten() }
+    }
+
+    const { name, startDate, endDate, goal, isComplianceApproved, ibaPercentage, type, productName, productPrice, productCost, productIba } = validatedFields.data
 
     // Warning check for IBA > 30%
     if (Number(ibaPercentage) > 30) {
@@ -178,6 +200,11 @@ export async function createFundraiser(prevState: any, formData: FormData) {
                 goal: new Decimal(goal),
                 isComplianceApproved,
                 ibaPercentage: parseInt(ibaPercentage),
+                type: type as any,
+                productName,
+                productPrice: productPrice ? new Decimal(productPrice) : null,
+                productCost: productCost ? new Decimal(productCost) : null,
+                productIba: productIba ? new Decimal(productIba) : null,
             }
         })
         revalidatePath("/dashboard/finance/fundraising")
@@ -549,5 +576,165 @@ export async function bulkRecordIBADeposits(prevState: any, formData: FormData) 
     } catch (error) {
         console.error("Bulk IBA Deposit Error:", error)
         return { error: "Failed to process bulk deposits" }
+    }
+}
+
+const productSaleSchema = z.object({
+    campaignId: z.string().min(1),
+    sales: z.array(z.object({
+        scoutId: z.string().min(1),
+        quantity: z.number().int().min(0)
+    }))
+})
+
+export async function recordProductSale(prevState: any, formData: FormData) {
+    const session = await auth()
+    if (!session || !["ADMIN", "FINANCIER"].includes(session.user.role)) {
+        return { error: "Unauthorized" }
+    }
+
+    const rawData = {
+        campaignId: formData.get("campaignId"),
+        sales: JSON.parse(formData.get("sales") as string)
+    }
+
+    console.log("Recording product sales for", rawData.campaignId)
+
+    const validatedFields = productSaleSchema.safeParse(rawData)
+
+    if (!validatedFields.success) {
+        return { error: "Invalid fields", issues: validatedFields.error.flatten() }
+    }
+
+    const { campaignId, sales } = validatedFields.data
+
+    try {
+        await prisma.$transaction(async (tx) => {
+            // For each sale, upsert
+            for (const sale of sales) {
+                if (sale.quantity > 0) {
+                    await tx.fundraisingSale.upsert({
+                        where: {
+                            campaignId_scoutId: {
+                                campaignId,
+                                scoutId: sale.scoutId
+                            }
+                        },
+                        create: {
+                            campaignId,
+                            scoutId: sale.scoutId,
+                            quantity: sale.quantity
+                        },
+                        update: {
+                            quantity: sale.quantity
+                        }
+                    })
+                } else {
+                    // If quantity 0, delete
+                    await tx.fundraisingSale.deleteMany({
+                        where: {
+                            campaignId,
+                            scoutId: sale.scoutId
+                        }
+                    })
+                }
+            }
+        })
+
+        revalidatePath(`/dashboard/finance/fundraising/${campaignId}`)
+        return { success: true, message: "Sales recorded successfully" }
+    } catch (error) {
+        console.error("Record Sales Error:", error)
+        return { error: "Failed to record sales" }
+    }
+}
+
+const fundraisingOrderSchema = z.object({
+    campaignId: z.string().min(1),
+    customerName: z.string().min(1, "Customer name is required"),
+    quantity: z.coerce.number().int().min(1, "Quantity must be at least 1"),
+    amountPaid: z.coerce.number().min(0, "Amount paid cannot be negative"),
+    delivered: z.boolean().optional(),
+    scoutId: z.string().optional()
+})
+
+export async function addOrder(prevState: any, formData: FormData) {
+    const session = await auth()
+    if (!session) return { error: "Unauthorized" }
+
+    const rawData = {
+        campaignId: formData.get("campaignId"),
+        customerName: formData.get("customerName"),
+        quantity: formData.get("quantity"),
+        amountPaid: formData.get("amountPaid"),
+        delivered: formData.get("delivered") === "on",
+        scoutId: formData.get("scoutId")
+    }
+
+    const validatedFields = fundraisingOrderSchema.safeParse(rawData)
+
+    if (!validatedFields.success) {
+        return { error: "Invalid fields", issues: validatedFields.error.flatten() }
+    }
+
+    const { campaignId, customerName, quantity, amountPaid, delivered, scoutId } = validatedFields.data
+
+    let finalScoutId = scoutId
+    if (!finalScoutId) {
+        const scout = await prisma.scout.findUnique({ where: { userId: session.user.id } })
+        if (scout) {
+            finalScoutId = scout.id
+        }
+    }
+
+    if (!finalScoutId) {
+        return { error: "Could not determine Scout ID" }
+    }
+
+    try {
+        await prisma.fundraisingOrder.create({
+            data: {
+                campaignId,
+                scoutId: finalScoutId,
+                customerName,
+                quantity,
+                amountPaid: new Decimal(amountPaid),
+                delivered: delivered || false
+            }
+        })
+        revalidatePath(`/dashboard/my-fundraising/${campaignId}`)
+        return { success: true, message: "Order added" }
+    } catch (error) {
+        console.error("Add Order Error:", error)
+        return { error: "Failed to add order" }
+    }
+}
+
+export async function deleteOrder(orderId: string, campaignId: string) {
+    const session = await auth()
+    if (!session) return { error: "Unauthorized" }
+
+    try {
+        await prisma.fundraisingOrder.delete({ where: { id: orderId } })
+        revalidatePath(`/dashboard/my-fundraising/${campaignId}`)
+        return { success: true, message: "Order deleted" }
+    } catch (error) {
+        return { error: "Failed to delete order" }
+    }
+}
+
+export async function toggleOrderDelivered(orderId: string, campaignId: string, currentStatus: boolean) {
+    const session = await auth()
+    if (!session) return { error: "Unauthorized" }
+
+    try {
+        await prisma.fundraisingOrder.update({
+            where: { id: orderId },
+            data: { delivered: !currentStatus }
+        })
+        revalidatePath(`/dashboard/my-fundraising/${campaignId}`)
+        return { success: true }
+    } catch (error) {
+        return { error: "Failed to update order" }
     }
 }

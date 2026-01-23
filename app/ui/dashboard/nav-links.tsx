@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import clsx from "clsx"
-import { Users, Home, TrendingUp, Tent, FileText, Settings, DollarSign } from "lucide-react"
+import { Users, Home, TrendingUp, Tent, FileText, Settings, DollarSign, ShoppingBag } from "lucide-react"
 import { Permission } from "@/lib/rbac"
 import { Role } from "@prisma/client"
 
@@ -25,6 +25,7 @@ export function NavLinks({ role, permissions, scoutId }: NavLinksProps) {
             icon: DollarSign,
             permission: 'VIEW_TRANSACTIONS'
         },
+        { name: 'My Fundraising', href: '/dashboard/my-fundraising', icon: ShoppingBag, permission: 'VIEW_FUNDRAISING' },
         { name: 'Campouts', href: '/dashboard/campouts', icon: Tent, permission: 'VIEW_CAMPOUTS' },
         { name: 'Reports', href: '/dashboard/reports', icon: FileText, permission: 'VIEW_REPORTS' },
         { name: 'Users', href: '/dashboard/users', icon: Users, permission: 'VIEW_USERS' },
@@ -33,7 +34,9 @@ export function NavLinks({ role, permissions, scoutId }: NavLinksProps) {
 
     const filteredLinks = allLinks.filter(link => {
         if (role === 'ADMIN') return true
+
         if (role === 'SCOUT' && link.name === 'Scouts') return false
+
         if (link.permission) {
             return permissions.includes(link.permission)
         }

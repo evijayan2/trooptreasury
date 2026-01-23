@@ -44,6 +44,8 @@ model Scout {
   parentLinks  ParentScout[]
   user         User?          @relation(fields: [userId], references: [id])
   transactions Transaction[]
+  sales        FundraisingSale[]
+  orders       FundraisingOrder[]
   email        String?        @unique
 }
 
@@ -172,6 +174,47 @@ model FundraisingCampaign {
   ibaPercentage        Int               @default(0)
   status               FundraisingStatus @default(ACTIVE)
   transactions         Transaction[]
+  type                 FundraisingType @default(GENERAL)
+  productName          String?
+  productPrice         Decimal?      @db.Decimal(10, 2)
+  productCost          Decimal?      @db.Decimal(10, 2) // Vendor/Unit cost
+  productIba           Decimal?      @db.Decimal(10, 2)
+  sales                FundraisingSale[]
+  orders               FundraisingOrder[]
+}
+
+model FundraisingOrder {
+  id               String              @id @default(uuid())
+  campaignId       String
+  scoutId          String
+  customerName     String
+  quantity         Int
+  amountPaid       Decimal             @default(0) @db.Decimal(10, 2)
+  delivered        Boolean             @default(false)
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+
+  campaign         FundraisingCampaign @relation(fields: [campaignId], references: [id])
+  scout            Scout               @relation(fields: [scoutId], references: [id])
+}
+
+model FundraisingSale {
+  id               String              @id @default(uuid())
+  campaignId       String
+  scoutId          String
+  quantity         Int
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+  
+  campaign         FundraisingCampaign @relation(fields: [campaignId], references: [id])
+  scout            Scout               @relation(fields: [scoutId], references: [id])
+
+  @@unique([campaignId, scoutId])
+}
+
+enum FundraisingType {
+  GENERAL
+  PRODUCT_SALE
 }
 
 enum FundraisingStatus {

@@ -8,6 +8,8 @@ import { Progress } from "@/components/ui/progress"
 import { DeleteCampaignButton } from "@/components/finance/DeleteCampaignButton"
 import { ToggleCampaignStatusButton } from "@/components/finance/ToggleCampaignStatusButton"
 
+import Link from "next/link"
+
 export default async function FundraisingPage() {
     const session = await auth()
     const isAdmin = ["ADMIN", "FINANCIER"].includes(session?.user?.role || "")
@@ -46,7 +48,7 @@ export default async function FundraisingPage() {
                         <Card key={camp.id} className={`relative ${isClosed ? 'opacity-70 bg-gray-50' : ''}`}>
                             <CardHeader>
                                 <div className="flex justify-between items-start gap-4">
-                                    <div className="space-y-1">
+                                    <Link href={`/dashboard/finance/fundraising/${camp.id}`} className="space-y-1 block flex-1 hover:opacity-80 transition-opacity">
                                         <CardTitle className="leading-tight flex items-center gap-2">
                                             {camp.name}
                                             {isClosed && <span className="bg-gray-200 text-gray-600 text-[10px] px-2 py-0.5 rounded-full uppercase font-bold">Closed</span>}
@@ -55,7 +57,7 @@ export default async function FundraisingPage() {
                                             {new Date(camp.startDate).toLocaleDateString()}
                                             {camp.endDate && ` - ${new Date(camp.endDate).toLocaleDateString()}`}
                                         </CardDescription>
-                                    </div>
+                                    </Link>
                                     <div className="flex items-center gap-2 shrink-0">
                                         {/* Compliance Status */}
                                         {camp.isComplianceApproved ? (
