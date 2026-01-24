@@ -5,6 +5,7 @@ Secure, simple finance management for your scout troop.
 ## Features
 
 - **Financial Management**: Track IBA balances, campout costs, and troop transactions.
+- **Fundraising**: Support for both General (Donation) and Product Sale campaigns with automatic profit allocation.
 - **Campout Management**: Register scouts and adults for events, track participation, and log expenses.
 - **Role-Based Access Control**: Different views and permissions for Admins, Financiers, Leaders, Parents, and Scouts.
 - **Database Backup/Restore**: Easily export and import your troop data.

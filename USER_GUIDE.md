@@ -81,15 +81,23 @@ Campout management is the heart of the system.
 5.  **Closing**: Once everyone has paid, move the status to **CLOSED** to lock the records.
 
 ### Fundraising Campaigns
-You can create campaigns (e.g., "Popcorn Sales 2024") to help the troop and scouts earn money.
+You can create campaigns to help the troop and scouts earn money. There are two types of campaigns:
 
-*   **IBA Percentage**: This is the magic number.
-    *   *Example*: You set a campaign to give **30%** to the Scout.
-    *   If a scout sells **\$100** worth of goods, the system automatically:
-        *   Adds **\$100** to the Troop Bank Account.
-        *   Updates the Scout's personal IBA Balance by **+\$30**.
-        *   The remaining **\$70** stays in the Troop General Fund.
-*   This calculation happens automatically when you record a `Fundraising Income` transaction linked to a campaign.
+#### 1. General / Donation (Percentage Based)
+Best for simple fundraisers like "Car Wash" or "Wreath Sales" where the profit is a straight percentage of the revenue.
+*   **How it works**: You set a "Scout Allocation %" (e.g., 30%).
+*   **Payout**: When a transaction is recorded, the system **immediately** credits 30% of that amount to the Scout's IBA.
+
+#### 2. Product Sale (Item Based)
+Best for selling physical items with fixed costs, like Popcorn or Candy Bars.
+*   **How it works**: You define a product (e.g., "Popcorn Box") with a **Price** (what user pays) and **Scout Profit** (amount to IBA).
+*   **Tracking**: Scouts track "Sales" (quantity of items sold).
+*   **Payout**: Unlike General campaigns, **no funds are added to the IBA during the campaign**.
+    *   Funds are distributed **ONLY when the mechanism is CLOSED**.
+    *   When an Admin clicks "Close Campaign", the system calculates the total sales for each scout and generates a bulk transaction to credit their IBAs.
+    *   *Warning*: Do not close the campaign until all sales are final!
+
+> **Screenshot Placeholder**: *[Image showing the Campaign Type selection toggle]*
 
 > **Screenshot Placeholder**: *[Image of the "New Fundraising Campaign" form highlighting the "IBA Percentage" field]*
 
@@ -136,3 +144,6 @@ A: Cash payments require manual verification. Please allow a few days for the Tr
 
 **Q: What happens if I overpay?**
 A: The system prevents overpayment on specific line items, but if a correction is made (e.g., campout cost drops), the difference can be credited back to your IBA by an Admin.
+
+**Q: Why hasn't my scout's balance gone up after selling Popcorn?**
+A: If it is a **Product Sale** campaign, the funds are not credited until the campaign is officially **CLOSED** by the Treasurer. This ensures all inventory is accounted for before payouts occur.
