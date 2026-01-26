@@ -7,8 +7,9 @@
   - You are about to drop the column `productPrice` on the `FundraisingCampaign` table. All the data in the column will be lost.
 
 */
--- AlterEnum
-ALTER TYPE "FundraisingStatus" ADD VALUE 'DRAFT';
+-- AlterEnum (Moved to previous migration to avoid transaction lock)
+-- ALTER TYPE "FundraisingStatus" ADD VALUE 'DRAFT';
+
 
 -- AlterTable
 ALTER TABLE "FundraisingCampaign" DROP COLUMN "productCost",
